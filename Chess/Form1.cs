@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Drawing;
 using System.Windows.Forms;
-using GameVisual;
 using GameModel;
 
 namespace Chess
@@ -11,16 +9,21 @@ namespace Chess
         public Form1()
         {
             InitializeComponent();
-            BoardVisual boardVisual = new BoardVisual(Controls, new Point(100, 100));
+            Game game = Game.Instance;
 
-            boardVisual.GetCellsVisuals[1, 6].CellLogic.PlacePiece(new Pawn(true));
-            boardVisual.GetCellsVisuals[2, 1].CellLogic.PlacePiece(new Pawn(false));
+            game.StartGame(Controls);
+            game.OnKingMated += Game_OnKingMated;
+        }
+
+        private void Game_OnKingMated(object sender, EventArgs e)
+        {
+            MessageBox.Show("Checkmate.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
 
         private void Form1_Click(object sender, EventArgs e)
         {
-            PieceSelection.Deselect();
+            PieceSelection.Instance.Deselect();
         }
     }
 }

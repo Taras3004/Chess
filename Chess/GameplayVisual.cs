@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Drawing;
-using System.Runtime.CompilerServices;
 using GameModel;
 using System.Windows.Forms;
+using Chess;
 
 namespace GameVisual
 {
@@ -40,7 +40,7 @@ namespace GameVisual
         public const int CELL_SIZE = 50;
         public readonly Cell CellLogic;
         private PieceVisual currPiece;
-        private Panel HighlightMark;
+        private Panel highlightMark;
 
         public CellVisual(Point position, Cell[,] board)
         {
@@ -49,7 +49,7 @@ namespace GameVisual
             BackColor = CellLogic.IsWhite ? Color.Beige : Color.Brown;
 
             CreateHighlightMark();
-            HighlightMark.Hide();
+            highlightMark.Hide();
 
             AllowDrop = true;
             DragEnter += (sender, e) => e.Effect = DragDropEffects.Move;
@@ -64,7 +64,7 @@ namespace GameVisual
         {
             const int MARK_SIZE = 20;
 
-            HighlightMark = new Panel()
+            highlightMark = new Panel()
             {
                 Location = new Point(
                     (CELL_SIZE - MARK_SIZE) / 2,
@@ -72,16 +72,16 @@ namespace GameVisual
                 Size = new Size(MARK_SIZE, MARK_SIZE),
                 BackColor = Color.Green
             };
-            Controls.Add(HighlightMark);
-            HighlightMark.BringToFront();
+            Controls.Add(highlightMark);
+            highlightMark.BringToFront();
 
             Cursor = Cursors.Hand;
-            HighlightMark.Click += HighlightMarkOnClick;
+            highlightMark.Click += HighlightMarkOnClick;
             
 
             void HighlightMarkOnClick(object sender, EventArgs e)
             {
-                PieceSelection.CurrentSelected.CurrentCell.TryMovePieceTo(CellLogic);
+                Game.Instance.Strategy.MakeMove(PieceSelection.Instance.CurrentSelected, CellLogic);
             }
         }
 
@@ -89,12 +89,12 @@ namespace GameVisual
         {
             if (obj == true)
             {
-                HighlightMark.Show();
-                HighlightMark.BringToFront();
+                highlightMark.Show();
+                highlightMark.BringToFront();
             }
             else
             {
-                HighlightMark.Hide();
+                highlightMark.Hide();
             }
         }
 
@@ -102,7 +102,7 @@ namespace GameVisual
         {
             if (e.Data.GetData(typeof(PieceVisual)) is PieceVisual pieceVisual)
             {
-                pieceVisual.PieceLogic.CurrentCell.TryMovePieceTo(CellLogic);
+                Game.Instance.Strategy.MakeMove(pieceVisual.PieceLogic, CellLogic);
             }
         }
 
@@ -123,32 +123,6 @@ namespace GameVisual
 
             Controls.Add(currPiece);
             currPiece.BringToFront();
-        }
-    }
-
-    public static class PieceSelection
-    {
-        public static Piece CurrentSelected { get; private set; }
-
-        public static void Select(Piece piece)
-        {
-            if (CurrentSelected != null && CurrentSelected != piece)
-            {
-                CurrentSelected.UpdateObservers(false);
-            }
-
-            CurrentSelected = piece;
-            CurrentSelected.UpdateObservers();
-            CurrentSelected.UpdateObservers(true);
-        }
-
-        public static void Deselect()
-        {
-            if (CurrentSelected != null)
-            {
-                CurrentSelected.UpdateObservers(false);
-                CurrentSelected = null;
-            }
         }
     }
 
@@ -194,7 +168,8 @@ namespace GameVisual
         {
             if (!isDragging)
             {
-                PieceSelection.Select(PieceLogic);
+                Game.Instance.Strategy.SelectPiece(PieceLogic);
+                //PieceSelection.Instance.Select(PieceLogic);
             }
         }
     }
@@ -203,13 +178,13 @@ namespace GameVisual
     {
         public static Image GetImage(Piece piece)
         {
+            throw new NotImplementedException();
             /*
             if (piece is Pawn && piece.Color == PieceColor.White)
                 return Properties.Resources.WhitePawn;
             if (piece is Knight && piece.Color == PieceColor.Black)
                 return Properties.Resources.BlackKnight;
             */
-            // Додати всі типи
             return null;
         }
     }
