@@ -10,43 +10,61 @@ namespace GameVisual
     {
         private const int BOARD_SIZE = 8;
         private readonly CellVisual[,] cellsVisuals = new CellVisual[BOARD_SIZE, BOARD_SIZE];
+        public readonly Board board;
 
-        public CellVisual[,] GetCellsVisuals => cellsVisuals;
-
-        public BoardVisual(Control.ControlCollection controls, Point offset)
+        public BoardVisual(IGameModeStrategy strategy, Control.ControlCollection controls, Point offset)
         {
             int gap = 5;
             int cellSize = CellVisual.CELL_SIZE;
 
-            Cell[,] board = new Cell[BOARD_SIZE, BOARD_SIZE];
+            board = new Board(new Cell[8, 8], strategy);
 
             for (int i = 0; i < BOARD_SIZE; i++)
             {
                 for (int j = 0; j < BOARD_SIZE; j++)
                 {
-                    cellsVisuals[i, j] = new CellVisual(new Point(i, j), board)
+                    cellsVisuals[i, j] = new CellVisual(new Point(i, j), board.BoardCells[i, j])
                     {
                         Location = new Point(cellSize * i + gap * i + offset.X, cellSize * j + gap * j + offset.Y)
                     };
-                    board[i, j] = cellsVisuals[i, j].CellLogic;
                     controls.Add(cellsVisuals[i, j]);
                 }
             }
+
+            board.OnKingMated += Board_OnKingMated;
+            board.OnKingChecked += Board_OnKingChecked;
+        }
+
+        private void Board_OnKingMated(object sender, PieceEventArgs e)
+        {
+            MessageBox.Show("Mate!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        private void Board_OnKingChecked(object sender, PieceEventArgs e)
+        {
+            MessageBox.Show("Check!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
+        public void PlacePiece(int x, int y, Piece piece)
+        {
+            board.BoardCells[x, y].PlacePiece(piece);
         }
     }
 
     public sealed class CellVisual : Panel
     {
         public const int CELL_SIZE = 50;
-        public readonly Cell CellLogic;
+        private readonly Cell cellLogic;
         private PieceVisual currPiece;
         private Panel highlightMark;
 
-        public CellVisual(Point position, Cell[,] board)
+        public bool isHighlighted { get; private set; }
+
+    public CellVisual(Point position, Cell cell)
         {
-            CellLogic = new Cell(position, board);
+            cellLogic = cell;
             Size = new Size(CELL_SIZE, CELL_SIZE);
-            BackColor = CellLogic.IsWhite ? Color.Beige : Color.Brown;
+            BackColor = cellLogic.IsWhite ? Color.Beige : Color.Brown;
 
             CreateHighlightMark();
             highlightMark.Hide();
@@ -55,8 +73,8 @@ namespace GameVisual
             DragEnter += (sender, e) => e.Effect = DragDropEffects.Move;
             DragDrop += CellVisual_OnDragDrop;
 
-            CellLogic.OnPieceChanged += CellLogic_OnPieceChanged;
-            CellLogic.OnCellHighlighted += CellLogic_OnCellHighlighted;
+            cellLogic.OnPieceChanged += CellLogic_OnPieceChanged;
+            cellLogic.OnCellHighlighted += CellLogic_OnCellHighlighted;
         }
 
 
@@ -81,7 +99,7 @@ namespace GameVisual
 
             void HighlightMarkOnClick(object sender, EventArgs e)
             {
-                Game.Instance.Strategy.MakeMove(PieceSelection.Instance.CurrentSelected, CellLogic);
+                Game.Instance.Strategy.MakeMove(PieceSelection.Instance.CurrentSelected, cellLogic);
             }
         }
 
@@ -91,10 +109,12 @@ namespace GameVisual
             {
                 highlightMark.Show();
                 highlightMark.BringToFront();
+                isHighlighted = true;
             }
             else
             {
                 highlightMark.Hide();
+                isHighlighted = false;
             }
         }
 
@@ -102,7 +122,7 @@ namespace GameVisual
         {
             if (e.Data.GetData(typeof(PieceVisual)) is PieceVisual pieceVisual)
             {
-                Game.Instance.Strategy.MakeMove(pieceVisual.PieceLogic, CellLogic);
+                Game.Instance.Strategy.MakeMove(pieceVisual.PieceLogic, cellLogic);
             }
         }
 
@@ -143,13 +163,14 @@ namespace GameVisual
 
             MouseDown += PieceVisual_OnMouseDown;
             MouseMove += PieceVisual_OnMouseMove;
-            MouseUp += PieceVisual_OnMouseUp;
         }
 
         private void PieceVisual_OnMouseDown(object sender, MouseEventArgs e)
         {
             isDragging = false;
             mouseDownLocation = e.Location;
+
+            Game.Instance.Strategy.SelectPiece(PieceLogic);
         }
 
         private void PieceVisual_OnMouseMove(object sender, MouseEventArgs e)
@@ -157,19 +178,16 @@ namespace GameVisual
             var dx = Math.Abs(e.X - mouseDownLocation.X);
             var dy = Math.Abs(e.Y - mouseDownLocation.Y);
 
+            if ((!PieceLogic.IsWhite || Game.Instance.CurrentColorMove != CurrentMove.White) &&
+                (PieceLogic.IsWhite || Game.Instance.CurrentColorMove != CurrentMove.Black)) return;
+
+            if (BoardManipulations.GetKing(PieceLogic.CurrentCell.Board, PieceLogic.IsWhite).IsCheckmated())
+                return;
+
             if (!isDragging && (dx > 4 || dy > 4)) // поріг у 4 пікселі
             {
                 isDragging = true;
                 DoDragDrop(this, DragDropEffects.Move);
-            }
-        }
-
-        private void PieceVisual_OnMouseUp(object sender, MouseEventArgs e)
-        {
-            if (!isDragging)
-            {
-                Game.Instance.Strategy.SelectPiece(PieceLogic);
-                //PieceSelection.Instance.Select(PieceLogic);
             }
         }
     }

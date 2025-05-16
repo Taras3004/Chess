@@ -5,12 +5,49 @@ using Chess;
 
 namespace GameModel
 {
-    public class Board(Cell[,] boardCells)
+    public class Board
     {
-        public Cell[,] BoardCells => boardCells;
+        public Cell[,] BoardCells { get; }
+
+        public event EventHandler<PieceEventArgs> OnKingChecked;
+        public event EventHandler<PieceEventArgs> OnKingMated;
+
+        public readonly IGameModeStrategy Strategy;
+
+        public Board(Cell[,] boardCells, IGameModeStrategy strategy)
+        {
+            this.Strategy = strategy;
+            BoardCells = boardCells;
+            for (int i = 0; i < 8; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    BoardCells[i, j] = new Cell(new Point(i, j), this);
+                }
+            }
+
+            strategy.OnPieceMoved += Strategy_OnPieceMoved;
+        }
+
+        private void Strategy_OnPieceMoved(object sender, PieceEventArgs e)
+        {
+            bool isWhitePieceMoved = e.Piece.IsWhite;
+            King king = null;
+
+            king = BoardManipulations.GetKing(e.Piece.CurrentCell.Board, !isWhitePieceMoved);
+
+            if (king.IsCheckmated())
+            {
+                OnKingMated?.Invoke(this, new PieceEventArgs { Piece = king });
+            }
+            else if (king.IsChecked())
+            {
+                OnKingChecked?.Invoke(this, new PieceEventArgs { Piece = king });
+            }
+        }
     }
 
-    public class Cell(Point position, Cell[,] board)
+    public class Cell(Point position, Board board)
     {
         public class OnPiecePlacedEventArgs : EventArgs
         {
@@ -22,7 +59,7 @@ namespace GameModel
 
         public bool IsWhite => (position.X + position.Y) % 2 == 0;
         public Point Position => position;
-        public Cell[,] Board => board;
+        public Board Board => board;
         public Piece Piece { get; private set; }
 
         public void PlacePiece(Piece p)
@@ -39,7 +76,7 @@ namespace GameModel
         public void RemovePiece()
         {
             if (Piece == null)
-                throw new NullReferenceException();
+                return;
             Piece = null;
 
             OnPieceChanged?.Invoke(this, new OnPiecePlacedEventArgs
@@ -77,7 +114,6 @@ namespace GameModel
     {
         public static PieceSelection Instance => instance ??= new PieceSelection();
         private static PieceSelection instance;
-        private bool isKingChecked;
 
         public Piece CurrentSelected { get; private set; }
 
@@ -85,11 +121,8 @@ namespace GameModel
         {
         }
 
-        public void Select(Piece piece)
+        private void Select(Piece piece, List<Cell> customObservers = null)
         {
-            if(isKingChecked && piece is King == false)
-                return;
-
             if (CurrentSelected != null && CurrentSelected != piece)
             {
                 CurrentSelected.UpdateObservers(false);
@@ -97,13 +130,42 @@ namespace GameModel
 
             CurrentSelected = piece;
             CurrentSelected.AttachObservers();
-            CurrentSelected.UpdateObservers(true);
-            
+            CurrentSelected.UpdateObservers(true, customObservers);
         }
 
-        public void KingChecked()
+        public bool TryToSelect(Piece piece)
         {
-            isKingChecked = true;
+            King king = BoardManipulations.GetKing(piece.CurrentCell.Board, piece.IsWhite);
+
+            if (king.IsChecked())
+            {
+                List<(Piece defender, Cell to)> possibleSelectedPieces = king.KingDefenders();
+
+                foreach (Cell move in king.PossibleMoves)
+                {
+                    possibleSelectedPieces.Add((king, move));
+                }
+
+                List<Cell> highlightedObservers = new List<Cell>();
+
+                foreach ((Piece defender, Cell to)  in possibleSelectedPieces)
+                {
+                    if(defender == piece)
+                        highlightedObservers.Add(to);
+                }
+
+                if (highlightedObservers.Count > 0)
+                {
+                    Select(piece, highlightedObservers);
+                    return true;
+                }
+                
+
+                return false;
+            }
+
+            Select(piece);
+            return true;
         }
 
         public void Deselect()
@@ -129,41 +191,6 @@ namespace GameModel
 
         public List<Cell> PossibleMoves => CalculatePossibleMoves();
 
-        protected List<Cell> GetLinearMoves((int dx, int dy)[] directions)
-        {
-            List<Cell> moves = [];
-            Point current = currentCell.Position;
-
-            foreach (var (dx, dy) in directions)
-            {
-                int x = current.X + dx;
-                int y = current.Y + dy;
-
-                while (IsInBounds(x, y))
-                {
-                    Cell target = currentCell.Board[x, y];
-
-                    if (!target.IsOccupied())
-                    {
-                        moves.Add(target);
-                    }
-                    else
-                    {
-                        if (target.Piece.IsWhite != this.IsWhite)
-                        {
-                            moves.Add(target); // можлива атака
-                        }
-
-                        break; // зустріли фігуру — далі не йдемо
-                    }
-
-                    x += dx;
-                    y += dy;
-                }
-            }
-
-            return moves;
-        }
 
         protected bool IsInBounds(int x, int y) => x is >= 0 and < 8 && y is >= 0 and < 8;
 
@@ -204,13 +231,67 @@ namespace GameModel
 
         public void UpdateObservers(bool state)
         {
-            if (observers == null)
-                return;
-
             foreach (Cell observer in observers)
             {
                 observer.UpdateHighlightMode(state);
             }
+        }
+
+        public void UpdateObservers(bool state, List<Cell> customObservers)
+        {
+            if (customObservers == null)
+            {
+                UpdateObservers(state);
+                return;
+            }
+
+            foreach (Cell observer in customObservers)
+            {
+                if (observers.Contains(observer) == false)
+                    throw new ArgumentException("Trying to highlight not attached observer!");
+                observer.UpdateHighlightMode(state);
+            }
+        }
+    }
+
+    public abstract class LinearPiece(bool isWhite) : Piece(isWhite)
+    {
+        public abstract (int, int)[] Directions();
+
+        protected List<Cell> GetLinearMoves((int dx, int dy)[] directions)
+        {
+            List<Cell> moves = [];
+            Point current = currentCell.Position;
+
+            foreach (var (dx, dy) in directions)
+            {
+                int x = current.X + dx;
+                int y = current.Y + dy;
+
+                while (IsInBounds(x, y))
+                {
+                    Cell target = currentCell.Board.BoardCells[x, y];
+
+                    if (!target.IsOccupied())
+                    {
+                        moves.Add(target);
+                    }
+                    else
+                    {
+                        if (target.Piece.IsWhite != this.IsWhite)
+                        {
+                            moves.Add(target); // можлива атака
+                        }
+
+                        break; // зустріли фігуру — далі не йдемо
+                    }
+
+                    x += dx;
+                    y += dy;
+                }
+            }
+
+            return moves;
         }
     }
 
@@ -227,14 +308,15 @@ namespace GameModel
 
             int nextRow = current.Y + direction;
 
-            if (IsInBounds(current.X, nextRow) && currentCell.Board[current.X, nextRow].IsOccupied() == false)
+            if (IsInBounds(current.X, nextRow) &&
+                currentCell.Board.BoardCells[current.X, nextRow].IsOccupied() == false)
             {
-                moves.Add(currentCell.Board[current.X, nextRow]);
+                moves.Add(currentCell.Board.BoardCells[current.X, nextRow]);
 
                 if (current.Y == startRow &&
-                    currentCell.Board[current.X, current.Y + 2 * direction].IsOccupied() == false)
+                    currentCell.Board.BoardCells[current.X, current.Y + 2 * direction].IsOccupied() == false)
                 {
-                    moves.Add(currentCell.Board[current.X, current.Y + 2 * direction]);
+                    moves.Add(currentCell.Board.BoardCells[current.X, current.Y + 2 * direction]);
                 }
             }
 
@@ -244,7 +326,7 @@ namespace GameModel
                 int newY = current.Y + direction;
                 if (IsInBounds(newX, newY))
                 {
-                    Cell targetCell = currentCell.Board[newX, newY];
+                    Cell targetCell = currentCell.Board.BoardCells[newX, newY];
                     if (targetCell.IsOccupied() && targetCell.Piece.IsWhite != IsWhite)
                     {
                         moves.Add(targetCell);
@@ -281,7 +363,7 @@ namespace GameModel
 
                 if (IsInBounds(newX, newY))
                 {
-                    Cell target = currentCell.Board[newX, newY];
+                    Cell target = currentCell.Board.BoardCells[newX, newY];
                     if (!target.IsOccupied() || target.Piece.IsWhite != this.IsWhite)
                     {
                         moves.Add(target);
@@ -298,11 +380,16 @@ namespace GameModel
         }
     }
 
-    public class Rook(bool isWhite) : Piece(isWhite)
+    public class Rook(bool isWhite) : LinearPiece(isWhite)
     {
+        public override (int, int)[] Directions()
+        {
+            return [(0, 1), (0, -1), (1, 0), (-1, 0)];
+        }
+
         protected override List<Cell> CalculatePossibleMoves()
         {
-            return GetLinearMoves([(0, 1), (0, -1), (1, 0), (-1, 0)]);
+            return GetLinearMoves(Directions());
         }
 
         public override Piece Clone()
@@ -311,11 +398,16 @@ namespace GameModel
         }
     }
 
-    public class Bishop(bool isWhite) : Piece(isWhite)
+    public class Bishop(bool isWhite) : LinearPiece(isWhite)
     {
+        public override (int, int)[] Directions()
+        {
+            return [(1, 1), (1, -1), (-1, 1), (-1, -1)];
+        }
+
         protected override List<Cell> CalculatePossibleMoves()
         {
-            return GetLinearMoves([(1, 1), (1, -1), (-1, 1), (-1, -1)]);
+            return GetLinearMoves(Directions());
         }
 
         public override Piece Clone()
@@ -324,14 +416,20 @@ namespace GameModel
         }
     }
 
-    public class Queen(bool isWhite) : Piece(isWhite)
+    public class Queen(bool isWhite) : LinearPiece(isWhite)
     {
-        protected override List<Cell> CalculatePossibleMoves()
+        public override (int, int)[] Directions()
         {
-            return GetLinearMoves([
+            return
+            [
                 (0, 1), (0, -1), (1, 0), (-1, 0),
                 (1, 1), (1, -1), (-1, 1), (-1, -1)
-            ]);
+            ];
+        }
+
+        protected override List<Cell> CalculatePossibleMoves()
+        {
+            return GetLinearMoves(Directions());
         }
 
         public override Piece Clone()
@@ -342,11 +440,7 @@ namespace GameModel
 
     public class King(bool isWhite) : Piece(isWhite)
     {
-
-        public event EventHandler OnKingChecked;
-        public event EventHandler OnKingMated;
-
-        private readonly (int, int)[] directions =
+        public readonly (int, int)[] Directions =
             [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)];
 
         protected override List<Cell> CalculatePossibleMoves()
@@ -354,8 +448,7 @@ namespace GameModel
             List<Cell> moves = [];
             Point current = currentCell.Position;
 
-
-            foreach (var (dx, dy) in directions)
+            foreach (var (dx, dy) in Directions)
             {
                 int x = current.X + dx;
                 int y = current.Y + dy;
@@ -363,7 +456,7 @@ namespace GameModel
                 if (!IsInBounds(x, y))
                     continue;
 
-                Cell target = currentCell.Board[x, y];
+                Cell target = currentCell.Board.BoardCells[x, y];
 
                 if (IsCanBePlacedOnCell(target) == false)
                     continue;
@@ -391,36 +484,90 @@ namespace GameModel
 
         private bool IsCanBePlacedOnCell(Cell targetCell)
         {
-            foreach (Cell attackedCell in BoardManipulations.GetAttackedCells(currentCell.Board, !IsWhite, true))
+            return GetAttackingPieces(targetCell).Count == 0;
+        }
+
+        private List<Piece> GetAttackingPieces(Cell cell)
+        {
+            List<Piece> pieces = new List<Piece>();
+            foreach ((Piece attackedBy, Cell attackedCell) in BoardManipulations.GetAttackedCells(
+                         currentCell.Board.BoardCells, !IsWhite))
             {
-                if (attackedCell == targetCell)
-                    return false;
+                if (attackedCell == cell)
+                    pieces.Add(attackedBy);
             }
 
-            return true;
+            return pieces;
         }
 
         public bool IsChecked()
         {
-            OnKingChecked?.Invoke(this, EventArgs.Empty);
             return IsCanBePlacedOnCell(currentCell) == false;
-            
+        }
+
+        public List<(Piece defender, Cell to)> KingDefenders()
+        {
+            List<Piece> attackingPieces = GetAttackingPieces(currentCell);
+            List<(Piece defender, Cell to)> defendingPieces = new();
+
+            if (attackingPieces.Count != 1)
+                return defendingPieces;
+
+            Piece attacker = attackingPieces[0];
+            List<Cell> pathToBlock = new List<Cell>();
+
+            if (attacker is Knight or Pawn)
+            {
+                pathToBlock.Add(attacker.CurrentCell);
+            }
+            else if (attacker is LinearPiece)
+            {
+                int dx = Math.Sign(currentCell.Position.X - attacker.CurrentCell.Position.X);
+                int dy = Math.Sign(currentCell.Position.Y - attacker.CurrentCell.Position.Y);
+                int x = attacker.CurrentCell.Position.X + dx;
+                int y = attacker.CurrentCell.Position.Y + dy;
+
+                while ((x, y) != (currentCell.Position.X, currentCell.Position.Y))
+                {
+                    pathToBlock.Add(currentCell.Board.BoardCells[x, y]);
+                    x += dx;
+                    y += dy;
+                }
+
+                pathToBlock.Add(attacker.CurrentCell);
+            }
+
+            foreach ((Piece piece, Cell move) in BoardManipulations.GetAllMoves(currentCell.Board, IsWhite))
+            {
+                if (pathToBlock.Contains(move))
+                    defendingPieces.Add((piece, move));
+            }
+
+            return defendingPieces;
         }
 
         public bool IsCheckmated()
         {
+            List<Piece> attackingPieces = GetAttackingPieces(currentCell);
+
             if (IsChecked() && PossibleMoves.Count == 0)
             {
-                OnKingMated?.Invoke(this, EventArgs.Empty);
+                if (attackingPieces.Count > 1)
+                    return true;
+
+                if (attackingPieces.Count == 1 && KingDefenders().Count != 0)
+                    return false;
+                
                 return true;
             }
+
             return false;
         }
     }
 
     public class Bot
     {
-        private int EvaluateBoard(Cell[,] board)
+        private int EvaluateBoard(Board board)
         {
             int score = 0;
 
@@ -428,7 +575,7 @@ namespace GameModel
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    var piece = board[x, y].Piece;
+                    var piece = board.BoardCells[x, y].Piece;
                     if (piece == null) continue;
 
                     int value = piece switch
@@ -449,19 +596,32 @@ namespace GameModel
             return score;
         }
 
-        public (Piece piece, Cell move) FindBestBotMove(Cell[,] originalBoard)
+        public (Piece piece, Cell move) FindBestBotMove(Board originalBoard)
         {
             int bestScore = int.MinValue;
+            List<(Piece, Cell)> possibleMoves = BoardManipulations.GetAllMoves(originalBoard, false); ;
             (Piece piece, Cell move) bestMove = (null, null);
 
-            foreach ((Piece piece, Cell move) in BoardManipulations.GetAllMoves(originalBoard, false))
+            King king = BoardManipulations.GetKing(originalBoard, false);
+
+            if (king.IsChecked())
+            {
+                possibleMoves = king.KingDefenders();
+                foreach (Cell move in king.PossibleMoves)
+                {
+                    possibleMoves.Add((king, move));
+                }
+            }
+
+
+            foreach ((Piece piece, Cell move) in possibleMoves)
             {
                 // Клонуємо
-                var boardClone = BoardManipulations.CloneBoard(originalBoard);
+                Board boardClone = BoardManipulations.CloneBoard(originalBoard);
 
                 // Знаходимо piece-копію і move-копію
-                Cell from = boardClone[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
-                Cell to = boardClone[move.Position.X, move.Position.Y];
+                Cell from = boardClone.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
+                Cell to = boardClone.BoardCells[move.Position.X, move.Position.Y];
 
                 from.TryMovePieceTo(to);
 
@@ -469,9 +629,10 @@ namespace GameModel
                 int worstResponse = int.MaxValue;
                 foreach ((Piece playerPiece, Cell playerMove) in BoardManipulations.GetAllMoves(boardClone, true))
                 {
-                    Cell[,] simBoard = BoardManipulations.CloneBoard(boardClone);
-                    Cell pFrom = simBoard[playerPiece.CurrentCell.Position.X, playerPiece.CurrentCell.Position.Y];
-                    Cell pTo = simBoard[playerMove.Position.X, playerMove.Position.Y];
+                    Board simBoard = BoardManipulations.CloneBoard(boardClone);
+                    Cell pFrom = simBoard.BoardCells[playerPiece.CurrentCell.Position.X,
+                        playerPiece.CurrentCell.Position.Y];
+                    Cell pTo = simBoard.BoardCells[playerMove.Position.X, playerMove.Position.Y];
 
                     pFrom.TryMovePieceTo(pTo);
 
@@ -494,7 +655,7 @@ namespace GameModel
 
     public abstract class BoardManipulations
     {
-        public static List<(Piece, Cell)> GetAllMoves(Cell[,] board, bool isWhite)
+        public static List<(Piece, Cell)> GetAllMoves(Board board, bool isWhite)
         {
             var moves = new List<(Piece, Cell)>();
 
@@ -502,7 +663,7 @@ namespace GameModel
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    Cell cell = board[x, y];
+                    Cell cell = board.BoardCells[x, y];
                     if (cell.IsOccupied() && cell.Piece.IsWhite == isWhite)
                     {
                         var piece = cell.Piece;
@@ -517,9 +678,9 @@ namespace GameModel
             return moves;
         }
 
-        public static List<Cell> GetAttackedCells(Cell[,] board, bool isWhite, bool ignoreOppositeKing)
+        public static List<(Piece attackedBy, Cell attackedCell)> GetAttackedCells(Cell[,] board, bool isWhite)
         {
-            var cells = new List<Cell>();
+            var cells = new List<(Piece, Cell)>();
 
             for (int x = 0; x < 8; x++)
             {
@@ -539,22 +700,19 @@ namespace GameModel
                             int tx = cell.Position.X + dx;
                             int ty = cell.Position.Y + direction;
                             if (IsInBounds(tx, ty))
-                                cells.Add(board[tx, ty]);
+                                cells.Add((piece, board[tx, ty]));
                         }
                     }
                     else if (piece is Knight)
                     {
-                        cells.AddRange(piece.PossibleMoves);
-                    }
-                    else if (piece is Rook or Bishop or Queen)
-                    {
-                        var directions = piece switch
+                        foreach (Cell target in piece.PossibleMoves)
                         {
-                            Rook => [(0, 1), (0, -1), (1, 0), (-1, 0)],
-                            Bishop => [(1, 1), (1, -1), (-1, 1), (-1, -1)],
-                            Queen => new[] { (0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1) },
-                            _ => []
-                        };
+                            cells.Add((piece, target));
+                        }
+                    }
+                    else if (piece is LinearPiece linearPiece)
+                    {
+                        var directions = linearPiece.Directions();
 
                         foreach (var (dx, dy) in directions)
                         {
@@ -563,7 +721,7 @@ namespace GameModel
                             while (IsInBounds(cx, cy))
                             {
                                 var target = board[cx, cy];
-                                cells.Add(target);
+                                cells.Add((piece, target));
 
                                 if (target.IsOccupied() && target.Piece is King == false)
                                     break;
@@ -573,17 +731,14 @@ namespace GameModel
                             }
                         }
                     }
-                    else if (piece is King)
+                    else if (piece is King king)
                     {
-                        foreach (var (dx, dy) in new[] {
-                    (0, 1), (0, -1), (1, 0), (-1, 0),
-                    (1, 1), (1, -1), (-1, 1), (-1, -1)
-                })
+                        foreach (var (dx, dy) in king.Directions)
                         {
                             int tx = x + dx;
                             int ty = y + dy;
                             if (IsInBounds(tx, ty))
-                                cells.Add(board[tx, ty]);
+                                cells.Add((king, board[tx, ty]));
                         }
                     }
                 }
@@ -594,14 +749,15 @@ namespace GameModel
             bool IsInBounds(int x, int y) => x is >= 0 and < 8 && y is >= 0 and < 8;
         }
 
-        public static Cell[,] CloneBoard(Cell[,] board)
+        public static Board CloneBoard(Board board)
         {
-            var clonedBoard = new Cell[8, 8];
+            Cell[,] clonedBoardCells = new Cell[8, 8];
+            Board clonedBoard = new Board(clonedBoardCells, board.Strategy);
             for (int x = 0; x < 8; x++)
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    clonedBoard[x, y] = new Cell(new Point(x, y), clonedBoard);
+                    clonedBoardCells[x, y] = new Cell(new Point(x, y), clonedBoard);
                 }
             }
 
@@ -609,11 +765,11 @@ namespace GameModel
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    Cell original = board[x, y];
+                    Cell original = board.BoardCells[x, y];
                     if (original.IsOccupied())
                     {
                         Piece clonedPiece = original.Piece.Clone();
-                        clonedBoard[x, y].PlacePiece(clonedPiece);
+                        clonedBoardCells[x, y].PlacePiece(clonedPiece);
                     }
                 }
             }
@@ -621,15 +777,15 @@ namespace GameModel
             return clonedBoard;
         }
 
-        public static King GetKing(Cell[,] board, bool isWhite)
+        public static King GetKing(Board board, bool isWhite)
         {
             for (int x = 0; x < 8; x++)
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    if (board[x, y].IsOccupied())
+                    if (board.BoardCells[x, y].IsOccupied())
                     {
-                        Piece piece = board[x, y].Piece;
+                        Piece piece = board.BoardCells[x, y].Piece;
 
                         if (piece is King king && king.IsWhite == isWhite)
                             return king;

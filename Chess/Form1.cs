@@ -12,12 +12,7 @@ namespace Chess
             Game game = Game.Instance;
 
             game.StartGame(Controls);
-            game.OnKingMated += Game_OnKingMated;
-        }
-
-        private void Game_OnKingMated(object sender, EventArgs e)
-        {
-            MessageBox.Show("Checkmate.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            //game.OnKingMated += Game_OnKingMated;
         }
 
 
