@@ -26,7 +26,7 @@ namespace Chess
 
         public void StartGame(Control.ControlCollection controls)
         {
-            strategy = new PvPStrategy(controls);
+            strategy = new PvBStrategy(controls);
 
             strategy.OnPieceSelected += Strategy_OnPieceSelected;
             strategy.OnPieceMoved += Strategy_OnPieceMoved;
@@ -68,10 +68,11 @@ namespace Chess
             CreateBoard(controls);
         }
 
-        public void CreateBoard(Control.ControlCollection controls)
+        private void CreateBoard(Control.ControlCollection controls)
         {
             BoardVisual boardVisual = new(this, controls, new Point(100, 100));
 
+            boardVisual.PlacePiece(3, 5, new Pawn(true));
             boardVisual.PlacePiece(4, 5, new King(true));
             boardVisual.PlacePiece(6, 6, new Rook(true));
             boardVisual.PlacePiece(6, 2, new Bishop(true));
@@ -128,7 +129,7 @@ namespace Chess
             OnPieceMoved?.Invoke(this, new PieceEventArgs {Piece = botDecision.piece});
         }
 
-        public void CreateBoard(Control.ControlCollection controls)
+        private void CreateBoard(Control.ControlCollection controls)
         {
             BoardVisual boardVisual = new(this, controls, new Point(100, 100));
 

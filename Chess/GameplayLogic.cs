@@ -705,6 +705,7 @@ namespace GameModel
                     }
                     else if (piece is Knight)
                     {
+                        //CHANGE
                         foreach (Cell target in piece.PossibleMoves)
                         {
                             cells.Add((piece, target));

@@ -3,6 +3,7 @@ using System.Drawing;
 using GameModel;
 using System.Windows.Forms;
 using Chess;
+using Chess.Properties;
 
 namespace GameVisual
 {
@@ -150,7 +151,7 @@ namespace GameVisual
     {
         public readonly Piece PieceLogic;
 
-        private const int PIECE_SIZE = 40;
+        private const int PIECE_SIZE = 50;
         private Point mouseDownLocation;
         private bool isDragging;
 
@@ -158,8 +159,11 @@ namespace GameVisual
         {
             PieceLogic = piece;
             Size = new Size(PIECE_SIZE, PIECE_SIZE);
-            BackColor = PieceLogic.IsWhite ? Color.White : Color.Black;
+            BackColor = Color.Transparent;
             Cursor = Cursors.Hand;
+
+            BackgroundImage = PieceImageResolver.GetImage(piece);
+            BackgroundImageLayout = ImageLayout.Stretch;
 
             MouseDown += PieceVisual_OnMouseDown;
             MouseMove += PieceVisual_OnMouseMove;
@@ -196,13 +200,31 @@ namespace GameVisual
     {
         public static Image GetImage(Piece piece)
         {
-            throw new NotImplementedException();
-            /*
-            if (piece is Pawn && piece.Color == PieceColor.White)
-                return Properties.Resources.WhitePawn;
-            if (piece is Knight && piece.Color == PieceColor.Black)
-                return Properties.Resources.BlackKnight;
-            */
+            if (piece is Pawn && piece.IsWhite)
+                return Resources.Chess_plt60;
+            if (piece is Knight && piece.IsWhite)
+                return Resources.Chess_nlt60;
+            if (piece is Bishop && piece.IsWhite)
+                return Resources.Chess_blt60;
+            if (piece is Queen && piece.IsWhite)
+                return Resources.Chess_qlt60;
+            if (piece is King && piece.IsWhite)
+                return Resources.Chess_klt60;
+            if (piece is Rook && piece.IsWhite)
+                return Resources.Chess_rlt60;
+
+            if (piece is Pawn && !piece.IsWhite)
+                return Resources.Chess_pdt60;
+            if (piece is Knight && !piece.IsWhite)
+                return Resources.Chess_ndt60;
+            if (piece is Bishop && !piece.IsWhite)
+                return Resources.Chess_bdt60;
+            if (piece is Queen && !piece.IsWhite)
+                return Resources.Chess_qdt60;
+            if (piece is King && !piece.IsWhite)
+                return Resources.Chess_kdt60;
+            if (piece is Rook && !piece.IsWhite)
+                return Resources.Chess_rdt60;
             return null;
         }
     }
