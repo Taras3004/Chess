@@ -34,6 +34,12 @@ namespace GameVisual
 
             board.OnKingMated += Board_OnKingMated;
             board.OnKingChecked += Board_OnKingChecked;
+            board.OnStalemateHappened += Board_OnStalemateHappened;
+        }
+
+        private void Board_OnStalemateHappened(object sender, EventArgs e)
+        {
+            MessageBox.Show("Stalemate!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private void Board_OnKingMated(object sender, PieceEventArgs e)
@@ -61,7 +67,7 @@ namespace GameVisual
 
         public bool isHighlighted { get; private set; }
 
-    public CellVisual(Point position, Cell cell)
+        public CellVisual(Point position, Cell cell)
         {
             cellLogic = cell;
             Size = new Size(CELL_SIZE, CELL_SIZE);
@@ -153,7 +159,7 @@ namespace GameVisual
 
         private const int PIECE_SIZE = 50;
         private Point mouseDownLocation;
-        private bool isDragging;
+        private static bool isDragging = true;
 
         public PieceVisual(Piece piece)
         {
@@ -167,6 +173,7 @@ namespace GameVisual
 
             MouseDown += PieceVisual_OnMouseDown;
             MouseMove += PieceVisual_OnMouseMove;
+            MouseUp += PieceVisual_OnMouseUp;
         }
 
         private void PieceVisual_OnMouseDown(object sender, MouseEventArgs e)
@@ -193,6 +200,11 @@ namespace GameVisual
                 isDragging = true;
                 DoDragDrop(this, DragDropEffects.Move);
             }
+        }
+
+        private void PieceVisual_OnMouseUp(object sender, MouseEventArgs e)
+        {
+            isDragging = false;
         }
     }
 

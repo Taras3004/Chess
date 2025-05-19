@@ -1,16 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
 using Chess;
 
 namespace GameModel
 {
     public class Board
     {
-        public Cell[,] BoardCells { get; }
+        public Cell[,] BoardCells { get; private set; }
 
         public event EventHandler<PieceEventArgs> OnKingChecked;
         public event EventHandler<PieceEventArgs> OnKingMated;
+        public event EventHandler OnStalemateHappened;
+
+        public Pawn LastPawnDoubleMove { get; private set; } = null;
 
         public readonly IGameModeStrategy Strategy;
 
@@ -26,24 +31,101 @@ namespace GameModel
                 }
             }
 
-            strategy.OnPieceMoved += Strategy_OnPieceMoved;
+            Strategy.OnPieceMoved += Strategy_OnPieceMoved;
         }
 
-        private void Strategy_OnPieceMoved(object sender, PieceEventArgs e)
+        private void Strategy_OnPieceMoved(object sender, PieceMovedEventArgs e)
         {
-            bool isWhitePieceMoved = e.Piece.IsWhite;
-            King king = null;
+            PieceSelection.Instance.Deselect();
+            Piece movedPiece = e.Piece;
+            Cell from = e.From;
+            if (movedPiece is Pawn pawn)
+            {
+                LastPawnDoubleMove = Math.Abs(pawn.CurrentCell.Position.Y - from.Position.Y) == 2 ? pawn : null;
 
-            king = BoardManipulations.GetKing(e.Piece.CurrentCell.Board, !isWhitePieceMoved);
+                CheckPawnPromotion(pawn);
+
+                if (pawn.EnPassant != null && pawn.CurrentCell.Position.X == pawn.EnPassant.Position.X)
+                {
+                    pawn.EnPassant.RemovePiece();
+                }
+
+            }
+            else
+                LastPawnDoubleMove = null;
+
+            if (movedPiece is King king)
+            {
+                king.Moved();
+                CheckCastling(king, from);
+            }
+            else if (movedPiece is Rook rook)
+                rook.Moved();
+
+
+            CheckKingProtection(movedPiece);
+        }
+
+        private void CheckPawnPromotion(Pawn pawn)
+        {
+            int endRow = pawn.IsWhite ? 0 : 7;
+            if (pawn.CurrentCell.Position.Y == endRow)
+            {
+                Cell endCell = pawn.CurrentCell;
+                pawn.CurrentCell.RemovePiece();
+                endCell.PlacePiece(new Queen(pawn.IsWhite)); //   CHOOSE PIECE
+            }
+        }
+
+        private void CheckKingProtection(Piece piece)
+        {
+            bool isWhitePieceMoved = piece.IsWhite;
+            King king = BoardManipulations.GetKing(piece.CurrentCell.Board, !isWhitePieceMoved);
 
             if (king.IsCheckmated())
             {
                 OnKingMated?.Invoke(this, new PieceEventArgs { Piece = king });
             }
+            else if (BoardManipulations.GetAllMoves(piece.CurrentCell.Board, !piece.IsWhite).Count == 0)
+            {
+                OnStalemateHappened?.Invoke(this, EventArgs.Empty);
+            }
             else if (king.IsChecked())
             {
                 OnKingChecked?.Invoke(this, new PieceEventArgs { Piece = king });
             }
+        }
+
+        private void CheckCastling(King king, Cell from)
+        {
+            if (Math.Abs(from.Position.X - king.CurrentCell.Position.X) == 2)
+            {
+                int y = from.Position.Y;
+                Cell[,] boardCells = king.CurrentCell.Board.BoardCells;
+
+                if (king.CurrentCell.Position.X == 6) // kingside
+                {
+                    Cell rookFrom = boardCells[7, y];
+                    Cell rookTo = boardCells[5, y];
+                    rookTo.PlacePiece(rookFrom.Piece);
+                    rookFrom.RemovePiece();
+                    (rookTo.Piece as Rook)?.Moved();
+                }
+                else if (king.CurrentCell.Position.X == 2) // queenside
+                {
+                    Cell rookFrom = boardCells[0, y];
+                    Cell rookTo = boardCells[3, y];
+                    rookTo.PlacePiece(rookFrom.Piece);
+                    rookFrom.RemovePiece();
+                    (rookTo.Piece as Rook)?.Moved();
+                }
+            }
+        }
+
+        public void DeleteBoard()
+        {
+            BoardCells = null;
+            Strategy.OnPieceMoved -= Strategy_OnPieceMoved;
         }
     }
 
@@ -148,9 +230,9 @@ namespace GameModel
 
                 List<Cell> highlightedObservers = new List<Cell>();
 
-                foreach ((Piece defender, Cell to)  in possibleSelectedPieces)
+                foreach ((Piece defender, Cell to) in possibleSelectedPieces)
                 {
-                    if(defender == piece)
+                    if (defender == piece)
                         highlightedObservers.Add(to);
                 }
 
@@ -159,7 +241,7 @@ namespace GameModel
                     Select(piece, highlightedObservers);
                     return true;
                 }
-                
+
 
                 return false;
             }
@@ -181,18 +263,26 @@ namespace GameModel
     public abstract class Piece(bool isWhite)
     {
         private readonly List<Cell> observers = [];
-        protected Cell currentCell;
+        private Cell currentCell;
 
         public bool IsWhite { get; } = isWhite;
+
         public Cell CurrentCell => currentCell;
 
-        protected abstract List<Cell> CalculatePossibleMoves();
+        public abstract List<Cell> GetAllMoves();
         public abstract Piece Clone();
 
         public List<Cell> PossibleMoves => CalculatePossibleMoves();
 
 
         protected bool IsInBounds(int x, int y) => x is >= 0 and < 8 && y is >= 0 and < 8;
+
+        private List<Cell> CalculatePossibleMoves()
+        {
+            return GetAllMoves().Where(cell =>
+                (!cell.IsOccupied() || (cell.IsOccupied() && cell.Piece.IsWhite != IsWhite)) &&
+                !IsKingUnderThreat(cell)).ToList();
+        }
 
         public bool CanMoveTo(Cell cell)
         {
@@ -202,7 +292,6 @@ namespace GameModel
         public void SetCurrentCell(Cell cell)
         {
             currentCell = cell;
-            AttachObservers();
         }
 
         public void AttachObservers()
@@ -219,7 +308,7 @@ namespace GameModel
             observers.Add(cell);
         }
 
-        public void DetachAllObservers()
+        private void DetachAllObservers()
         {
             foreach (var observer in observers)
             {
@@ -252,42 +341,94 @@ namespace GameModel
                 observer.UpdateHighlightMode(state);
             }
         }
+
+        protected bool IsKingUnderThreat(Cell cell)
+        {
+            var clonedBoard = BoardManipulations.CloneBoard(cell.Board);
+
+            King king = BoardManipulations.GetKing(clonedBoard, IsWhite);
+
+            var fromCell = clonedBoard.BoardCells[currentCell.Position.X, currentCell.Position.Y];
+            var toCell = clonedBoard.BoardCells[cell.Position.X, cell.Position.Y];
+
+            bool isKing = fromCell.Piece == king;
+
+            toCell.PlacePiece(fromCell.Piece);
+            fromCell.RemovePiece();
+
+            List<(Piece attackedBy, Cell attackedCell)> attackedCells =
+                BoardManipulations.GetAttackedCells(clonedBoard.BoardCells, !IsWhite);
+            bool isKingUnderThreat;
+
+            if (isKing)
+            {
+                int row = IsWhite ? 7 : 0;
+
+                if (fromCell.Position == new Point(4, row)) // check castling
+                {
+                    if (toCell.Position == new Point(6, row))
+                    {
+                        var pathCells = new[] {
+                            clonedBoard.BoardCells[5, row],
+                            clonedBoard.BoardCells[6, row]
+                        };
+
+                        if (pathCells.Any(pathCell =>
+                                attackedCells.Any(x => x.attackedCell.Position == pathCell.Position)))
+                        {
+                            clonedBoard.DeleteBoard();
+                            return true;
+                        }
+                    }
+                    else if (toCell.Position == new Point(2, row))
+                    {
+                        var pathCells = new[] {
+                            clonedBoard.BoardCells[3, row],
+                            clonedBoard.BoardCells[2, row]
+                        };
+
+                        if (pathCells.Any(pathCell =>
+                                attackedCells.Any(x => x.attackedCell.Position == pathCell.Position)))
+                        {
+                            clonedBoard.DeleteBoard();
+                            return true;
+                        }
+                    }
+                }
+
+                isKingUnderThreat = attackedCells.Any(x => x.attackedCell.Position == toCell.Position);
+            }
+            else
+                isKingUnderThreat = attackedCells.Any(x => x.attackedCell.Position.Equals(king.currentCell.Position));
+
+            clonedBoard.DeleteBoard();
+            return isKingUnderThreat;
+        }
     }
 
     public abstract class LinearPiece(bool isWhite) : Piece(isWhite)
     {
-        public abstract (int, int)[] Directions();
+        protected abstract (int, int)[] Directions();
 
-        protected List<Cell> GetLinearMoves((int dx, int dy)[] directions)
+        public override List<Cell> GetAllMoves()
         {
-            List<Cell> moves = [];
-            Point current = currentCell.Position;
+            List<Cell> moves = new List<Cell>();
 
-            foreach (var (dx, dy) in directions)
+            foreach (var (dx, dy) in Directions())
             {
-                int x = current.X + dx;
-                int y = current.Y + dy;
+                int cx = CurrentCell.Position.X + dx;
+                int cy = CurrentCell.Position.Y + dy;
 
-                while (IsInBounds(x, y))
+                while (IsInBounds(cx, cy))
                 {
-                    Cell target = currentCell.Board.BoardCells[x, y];
+                    Cell target = CurrentCell.Board.BoardCells[cx, cy];
+                    moves.Add(target);
 
-                    if (!target.IsOccupied())
-                    {
-                        moves.Add(target);
-                    }
-                    else
-                    {
-                        if (target.Piece.IsWhite != this.IsWhite)
-                        {
-                            moves.Add(target); // можлива атака
-                        }
+                    if (target.IsOccupied())
+                        break;
 
-                        break; // зустріли фігуру — далі не йдемо
-                    }
-
-                    x += dx;
-                    y += dy;
+                    cx += dx;
+                    cy += dy;
                 }
             }
 
@@ -297,27 +438,41 @@ namespace GameModel
 
     public class Pawn(bool isWhite) : Piece(isWhite)
     {
-        protected override List<Cell> CalculatePossibleMoves()
+        public Cell EnPassant { get; private set; }
+
+        public override List<Cell> GetAllMoves()
         {
             List<Cell> moves = [];
 
             int direction = IsWhite ? -1 : 1;
             int startRow = IsWhite ? 6 : 1;
 
-            Point current = currentCell.Position;
+            Point current = CurrentCell.Position;
+            ;
 
-            int nextRow = current.Y + direction;
-
-            if (IsInBounds(current.X, nextRow) &&
-                currentCell.Board.BoardCells[current.X, nextRow].IsOccupied() == false)
+            if (IsInBounds(current.X, current.Y + direction) &&
+                CurrentCell.Board.BoardCells[current.X, current.Y + direction].IsOccupied() == false)
             {
-                moves.Add(currentCell.Board.BoardCells[current.X, nextRow]);
+                moves.Add(CurrentCell.Board.BoardCells[current.X, current.Y + direction]);
 
                 if (current.Y == startRow &&
-                    currentCell.Board.BoardCells[current.X, current.Y + 2 * direction].IsOccupied() == false)
+                    CurrentCell.Board.BoardCells[current.X, current.Y + 2 * direction].IsOccupied() == false)
                 {
-                    moves.Add(currentCell.Board.BoardCells[current.X, current.Y + 2 * direction]);
+                    moves.Add(CurrentCell.Board.BoardCells[current.X, current.Y + 2 * direction]);
                 }
+            }
+
+            Pawn doubleMovedPawn = CurrentCell.Board.LastPawnDoubleMove; // en passant
+
+            if (doubleMovedPawn != null &&
+                IsWhite != doubleMovedPawn.IsWhite &&
+                doubleMovedPawn.CurrentCell.Position.Y == CurrentCell.Position.Y &&
+                Math.Abs(doubleMovedPawn.CurrentCell.Position.X - CurrentCell.Position.X) == 1)
+            {
+                
+                int dir = IsWhite ? -1 : 1;
+                EnPassant = doubleMovedPawn.CurrentCell;
+                moves.Add(CurrentCell.Board.BoardCells[EnPassant.Position.X, EnPassant.Position.Y + 1 * dir]);
             }
 
             foreach (int dx in new[] { -1, 1 })
@@ -326,8 +481,8 @@ namespace GameModel
                 int newY = current.Y + direction;
                 if (IsInBounds(newX, newY))
                 {
-                    Cell targetCell = currentCell.Board.BoardCells[newX, newY];
-                    if (targetCell.IsOccupied() && targetCell.Piece.IsWhite != IsWhite)
+                    Cell targetCell = CurrentCell.Board.BoardCells[newX, newY];
+                    if (targetCell.IsOccupied())
                     {
                         moves.Add(targetCell);
                     }
@@ -345,10 +500,10 @@ namespace GameModel
 
     public class Knight(bool isWhite) : Piece(isWhite)
     {
-        protected override List<Cell> CalculatePossibleMoves()
+        public override List<Cell> GetAllMoves()
         {
-            List<Cell> moves = [];
-            Point current = currentCell.Position;
+            List<Cell> moves = new List<Cell>();
+            Point current = CurrentCell.Position;
 
             int[,] offsets =
             {
@@ -362,13 +517,7 @@ namespace GameModel
                 int newY = current.Y + offsets[i, 1];
 
                 if (IsInBounds(newX, newY))
-                {
-                    Cell target = currentCell.Board.BoardCells[newX, newY];
-                    if (!target.IsOccupied() || target.Piece.IsWhite != this.IsWhite)
-                    {
-                        moves.Add(target);
-                    }
-                }
+                    moves.Add(CurrentCell.Board.BoardCells[newX, newY]);
             }
 
             return moves;
@@ -382,14 +531,16 @@ namespace GameModel
 
     public class Rook(bool isWhite) : LinearPiece(isWhite)
     {
-        public override (int, int)[] Directions()
+        public bool HasMoved { get; private set; }
+
+        public void Moved()
         {
-            return [(0, 1), (0, -1), (1, 0), (-1, 0)];
+            HasMoved = true;
         }
 
-        protected override List<Cell> CalculatePossibleMoves()
+        protected override (int, int)[] Directions()
         {
-            return GetLinearMoves(Directions());
+            return [(0, 1), (0, -1), (1, 0), (-1, 0)];
         }
 
         public override Piece Clone()
@@ -400,14 +551,9 @@ namespace GameModel
 
     public class Bishop(bool isWhite) : LinearPiece(isWhite)
     {
-        public override (int, int)[] Directions()
+        protected override (int, int)[] Directions()
         {
             return [(1, 1), (1, -1), (-1, 1), (-1, -1)];
-        }
-
-        protected override List<Cell> CalculatePossibleMoves()
-        {
-            return GetLinearMoves(Directions());
         }
 
         public override Piece Clone()
@@ -418,18 +564,13 @@ namespace GameModel
 
     public class Queen(bool isWhite) : LinearPiece(isWhite)
     {
-        public override (int, int)[] Directions()
+        protected override (int, int)[] Directions()
         {
             return
             [
                 (0, 1), (0, -1), (1, 0), (-1, 0),
                 (1, 1), (1, -1), (-1, 1), (-1, -1)
             ];
-        }
-
-        protected override List<Cell> CalculatePossibleMoves()
-        {
-            return GetLinearMoves(Directions());
         }
 
         public override Piece Clone()
@@ -440,15 +581,22 @@ namespace GameModel
 
     public class King(bool isWhite) : Piece(isWhite)
     {
-        public readonly (int, int)[] Directions =
+        private bool HasMoved { get; set; } = false;
+
+        private readonly (int, int)[] directions =
             [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)];
 
-        protected override List<Cell> CalculatePossibleMoves()
+        public void Moved()
         {
-            List<Cell> moves = [];
-            Point current = currentCell.Position;
+            HasMoved = true;
+        }
 
-            foreach (var (dx, dy) in Directions)
+        public override List<Cell> GetAllMoves()
+        {
+            List<Cell> moves = new List<Cell>();
+            Point current = CurrentCell.Position;
+
+            foreach ((int dx, int dy) in directions)
             {
                 int x = current.X + dx;
                 int y = current.Y + dy;
@@ -456,21 +604,38 @@ namespace GameModel
                 if (!IsInBounds(x, y))
                     continue;
 
-                Cell target = currentCell.Board.BoardCells[x, y];
+                Cell target = CurrentCell.Board.BoardCells[x, y];
 
-                if (IsCanBePlacedOnCell(target) == false)
-                    continue;
+                moves.Add(target);
+            }
 
-                if (!target.IsOccupied())
+            Cell[,] boardCells = CurrentCell.Board.BoardCells;
+
+            if (!HasMoved && !IsChecked()) //castling
+            {
+                if (IsAvailable(new Point(current.X + 1, current.Y)) && // king side
+                    IsAvailable(new Point(current.X + 2, current.Y)) &&
+                    IsInBounds(current.X + 3, current.Y) &&
+                    boardCells[current.X + 3, current.Y].IsOccupied() &&
+                    boardCells[current.X + 3, current.Y].Piece is Rook { HasMoved: false })
                 {
-                    moves.Add(target);
+                    moves.Add(boardCells[current.X + 2, current.Y]);
                 }
-                else
+
+                if (IsAvailable(new Point(current.X - 1, current.Y)) && // queen side
+                    IsAvailable(new Point(current.X - 2, current.Y)) &&
+                    IsAvailable(new Point(current.X - 3, current.Y)) &&
+                    IsInBounds(current.X - 4, current.Y) &&
+                    boardCells[current.X - 4, current.Y].IsOccupied() &&
+                    boardCells[current.X - 4, current.Y].Piece is Rook { HasMoved: false })
                 {
-                    if (target.Piece.IsWhite != this.IsWhite)
-                    {
-                        moves.Add(target);
-                    }
+                    moves.Add(boardCells[current.X - 2, current.Y]);
+                }
+
+                bool IsAvailable(Point cellPosition)
+                {
+                    return IsInBounds(cellPosition.X, cellPosition.Y) &&
+                        !boardCells[cellPosition.X, cellPosition.Y].IsOccupied();
                 }
             }
 
@@ -482,16 +647,11 @@ namespace GameModel
             return new King(IsWhite);
         }
 
-        private bool IsCanBePlacedOnCell(Cell targetCell)
-        {
-            return GetAttackingPieces(targetCell).Count == 0;
-        }
-
         private List<Piece> GetAttackingPieces(Cell cell)
         {
             List<Piece> pieces = new List<Piece>();
             foreach ((Piece attackedBy, Cell attackedCell) in BoardManipulations.GetAttackedCells(
-                         currentCell.Board.BoardCells, !IsWhite))
+                         CurrentCell.Board.BoardCells, !IsWhite))
             {
                 if (attackedCell == cell)
                     pieces.Add(attackedBy);
@@ -502,12 +662,12 @@ namespace GameModel
 
         public bool IsChecked()
         {
-            return IsCanBePlacedOnCell(currentCell) == false;
+            return IsKingUnderThreat(CurrentCell);
         }
 
         public List<(Piece defender, Cell to)> KingDefenders()
         {
-            List<Piece> attackingPieces = GetAttackingPieces(currentCell);
+            List<Piece> attackingPieces = GetAttackingPieces(CurrentCell);
             List<(Piece defender, Cell to)> defendingPieces = new();
 
             if (attackingPieces.Count != 1)
@@ -522,14 +682,14 @@ namespace GameModel
             }
             else if (attacker is LinearPiece)
             {
-                int dx = Math.Sign(currentCell.Position.X - attacker.CurrentCell.Position.X);
-                int dy = Math.Sign(currentCell.Position.Y - attacker.CurrentCell.Position.Y);
+                int dx = Math.Sign(CurrentCell.Position.X - attacker.CurrentCell.Position.X);
+                int dy = Math.Sign(CurrentCell.Position.Y - attacker.CurrentCell.Position.Y);
                 int x = attacker.CurrentCell.Position.X + dx;
                 int y = attacker.CurrentCell.Position.Y + dy;
 
-                while ((x, y) != (currentCell.Position.X, currentCell.Position.Y))
+                while ((x, y) != (CurrentCell.Position.X, CurrentCell.Position.Y))
                 {
-                    pathToBlock.Add(currentCell.Board.BoardCells[x, y]);
+                    pathToBlock.Add(CurrentCell.Board.BoardCells[x, y]);
                     x += dx;
                     y += dy;
                 }
@@ -537,7 +697,7 @@ namespace GameModel
                 pathToBlock.Add(attacker.CurrentCell);
             }
 
-            foreach ((Piece piece, Cell move) in BoardManipulations.GetAllMoves(currentCell.Board, IsWhite))
+            foreach ((Piece piece, Cell move) in BoardManipulations.GetAllMoves(CurrentCell.Board, IsWhite))
             {
                 if (pathToBlock.Contains(move))
                     defendingPieces.Add((piece, move));
@@ -548,16 +708,19 @@ namespace GameModel
 
         public bool IsCheckmated()
         {
-            List<Piece> attackingPieces = GetAttackingPieces(currentCell);
+            if (IsChecked() == false)
+                return false;
 
-            if (IsChecked() && PossibleMoves.Count == 0)
+            List<Piece> attackingPieces = GetAttackingPieces(CurrentCell);
+
+            if (PossibleMoves.Count == 0)
             {
                 if (attackingPieces.Count > 1)
                     return true;
 
                 if (attackingPieces.Count == 1 && KingDefenders().Count != 0)
                     return false;
-                
+
                 return true;
             }
 
@@ -599,7 +762,8 @@ namespace GameModel
         public (Piece piece, Cell move) FindBestBotMove(Board originalBoard)
         {
             int bestScore = int.MinValue;
-            List<(Piece, Cell)> possibleMoves = BoardManipulations.GetAllMoves(originalBoard, false); ;
+            List<(Piece, Cell)> possibleMoves = BoardManipulations.GetAllMoves(originalBoard, false);
+            ;
             (Piece piece, Cell move) bestMove = (null, null);
 
             King king = BoardManipulations.GetKing(originalBoard, false);
@@ -616,16 +780,13 @@ namespace GameModel
 
             foreach ((Piece piece, Cell move) in possibleMoves)
             {
-                // Клонуємо
                 Board boardClone = BoardManipulations.CloneBoard(originalBoard);
 
-                // Знаходимо piece-копію і move-копію
                 Cell from = boardClone.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
                 Cell to = boardClone.BoardCells[move.Position.X, move.Position.Y];
 
                 from.TryMovePieceTo(to);
 
-                // Найкраща відповідь гравця
                 int worstResponse = int.MaxValue;
                 foreach ((Piece playerPiece, Cell playerMove) in BoardManipulations.GetAllMoves(boardClone, true))
                 {
@@ -639,9 +800,13 @@ namespace GameModel
                     int score = EvaluateBoard(simBoard);
                     if (score < worstResponse)
                         worstResponse = score;
+
+                    simBoard.DeleteBoard();
                 }
 
-                // Мінімізуємо найгірший варіант
+                boardClone.DeleteBoard();
+
+
                 if (worstResponse > bestScore)
                 {
                     bestScore = worstResponse;
@@ -694,63 +859,25 @@ namespace GameModel
 
                     if (piece is Pawn)
                     {
-                        int direction = isWhite ? -1 : 1;
-                        foreach (int dx in new[] { -1, 1 })
+                        foreach (Cell move in piece.GetAllMoves())
                         {
-                            int tx = cell.Position.X + dx;
-                            int ty = cell.Position.Y + direction;
-                            if (IsInBounds(tx, ty))
-                                cells.Add((piece, board[tx, ty]));
+                            if(move.Position.X != piece.CurrentCell.Position.X)
+                                cells.Add((piece, move));
                         }
+                        continue;
                     }
-                    else if (piece is Knight)
-                    {
-                        //CHANGE
-                        foreach (Cell target in piece.PossibleMoves)
-                        {
-                            cells.Add((piece, target));
-                        }
-                    }
-                    else if (piece is LinearPiece linearPiece)
-                    {
-                        var directions = linearPiece.Directions();
 
-                        foreach (var (dx, dy) in directions)
-                        {
-                            int cx = x + dx;
-                            int cy = y + dy;
-                            while (IsInBounds(cx, cy))
-                            {
-                                var target = board[cx, cy];
-                                cells.Add((piece, target));
-
-                                if (target.IsOccupied() && target.Piece is King == false)
-                                    break;
-
-                                cx += dx;
-                                cy += dy;
-                            }
-                        }
-                    }
-                    else if (piece is King king)
+                    foreach (Cell move in piece.GetAllMoves())
                     {
-                        foreach (var (dx, dy) in king.Directions)
-                        {
-                            int tx = x + dx;
-                            int ty = y + dy;
-                            if (IsInBounds(tx, ty))
-                                cells.Add((king, board[tx, ty]));
-                        }
+                        cells.Add((piece, move));
                     }
                 }
             }
 
             return cells;
-
-            bool IsInBounds(int x, int y) => x is >= 0 and < 8 && y is >= 0 and < 8;
         }
 
-        public static Board CloneBoard(Board board)
+        public static Board CloneBoard(Board board) // DELETE BOARD AFTER USING!!!
         {
             Cell[,] clonedBoardCells = new Cell[8, 8];
             Board clonedBoard = new Board(clonedBoardCells, board.Strategy);

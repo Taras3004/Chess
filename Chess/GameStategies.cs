@@ -26,13 +26,13 @@ namespace Chess
 
         public void StartGame(Control.ControlCollection controls)
         {
-            strategy = new PvBStrategy(controls);
+            strategy = new PvPStrategy(controls);
 
             strategy.OnPieceSelected += Strategy_OnPieceSelected;
             strategy.OnPieceMoved += Strategy_OnPieceMoved;
         }
 
-        private void Strategy_OnPieceMoved(object sender, PieceEventArgs e)
+        private void Strategy_OnPieceMoved(object sender, PieceMovedEventArgs e)
         {
             if (strategy is PvPStrategy)
             {
@@ -61,7 +61,7 @@ namespace Chess
         private bool isWhiteTurn = true;
 
         public event EventHandler<PieceEventArgs> OnPieceSelected;
-        public event EventHandler<PieceEventArgs> OnPieceMoved;
+        public event EventHandler<PieceMovedEventArgs> OnPieceMoved;
 
         public PvPStrategy(Control.ControlCollection controls)
         {
@@ -72,14 +72,16 @@ namespace Chess
         {
             BoardVisual boardVisual = new(this, controls, new Point(100, 100));
 
-            boardVisual.PlacePiece(3, 5, new Pawn(true));
-            boardVisual.PlacePiece(4, 5, new King(true));
-            boardVisual.PlacePiece(6, 6, new Rook(true));
-            boardVisual.PlacePiece(6, 2, new Bishop(true));
+            boardVisual.PlacePiece(1, 4, new Pawn(true));
+            boardVisual.PlacePiece(4, 7, new King(true));
+            boardVisual.PlacePiece(0, 7, new Rook(true));
+            //boardVisual.PlacePiece(7, 7, new Rook(true));
 
-            boardVisual.PlacePiece(6, 7, new Rook(false));
-            boardVisual.PlacePiece(7, 4, new Knight(false));
-            boardVisual.PlacePiece(0, 0, new King(false));
+            boardVisual.PlacePiece(0, 1, new Pawn(false));
+            boardVisual.PlacePiece(2, 1, new Pawn(false));
+            boardVisual.PlacePiece(3, 0, new King(false));
+            //boardVisual.PlacePiece(1, 5, new Bishop(false));
+            //boardVisual.PlacePiece(3, 5, new Bishop(false));
         }
 
         public void SelectPiece(Piece p)
@@ -92,9 +94,11 @@ namespace Chess
 
         public void MakeMove(Piece piece, Cell targetCell)
         {
+            Cell fromCell = piece.CurrentCell;
+
             if (piece.CurrentCell.TryMovePieceTo(targetCell))
             {
-                OnPieceMoved?.Invoke(this, new PieceEventArgs{Piece = piece});
+                OnPieceMoved?.Invoke(this, new PieceMovedEventArgs(){Piece = piece, From = fromCell});
                 isWhiteTurn = !isWhiteTurn;
             }
         }
@@ -103,7 +107,7 @@ namespace Chess
     public class PvBStrategy : IGameModeStrategy
     {
         public event EventHandler<PieceEventArgs> OnPieceSelected;
-        public event EventHandler<PieceEventArgs> OnPieceMoved;
+        public event EventHandler<PieceMovedEventArgs> OnPieceMoved;
 
         private bool isBotMove = false;
         private readonly Bot bot = new();
@@ -123,10 +127,12 @@ namespace Chess
             timer.Stop();
             if (BoardManipulations.GetKing(board, false).IsCheckmated())
                 return;
+
             var botDecision = bot.FindBestBotMove(board);
+            Cell fromCell = botDecision.piece.CurrentCell;
             botDecision.piece.CurrentCell.TryMovePieceTo(botDecision.move);
             isBotMove = !isBotMove;
-            OnPieceMoved?.Invoke(this, new PieceEventArgs {Piece = botDecision.piece});
+            OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() {Piece = botDecision.piece, From = fromCell});
         }
 
         private void CreateBoard(Control.ControlCollection controls)
@@ -163,10 +169,11 @@ namespace Chess
 
         public void MakeMove(Piece piece, Cell targetCell)
         {
+            Cell fromCell = piece.CurrentCell;
             if (piece.CurrentCell.TryMovePieceTo(targetCell))
             {
                 isBotMove = !isBotMove;
-                OnPieceMoved?.Invoke(this, new PieceEventArgs {Piece = piece});
+                OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() {Piece = piece, From = fromCell});
                 board = targetCell.Board;
 
                 timer.Start();
@@ -179,11 +186,17 @@ namespace Chess
         public Piece Piece;
     }
 
+    public class PieceMovedEventArgs : EventArgs
+    {
+        public Piece Piece;
+        public Cell From;
+    }
+
     public interface IGameModeStrategy
     {
         event EventHandler<PieceEventArgs> OnPieceSelected;
 
-        event EventHandler<PieceEventArgs> OnPieceMoved;
+        event EventHandler<PieceMovedEventArgs> OnPieceMoved;
 
         void SelectPiece(Piece p);
 
