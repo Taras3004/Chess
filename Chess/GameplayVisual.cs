@@ -131,6 +131,14 @@ namespace GameVisual
             {
                 Game.Instance.Strategy.MakeMove(pieceVisual.PieceLogic, cellLogic);
             }
+
+            if (e.Data.GetData(typeof(PieceSpawner)) is PieceSpawner pieceSpawner)
+            {
+                if (cellLogic.IsOccupied() == false)
+                {
+                    cellLogic.PlacePiece(pieceSpawner.GetPiece());
+                }
+            }
         }
 
         private void CellLogic_OnPieceChanged(object sender, Cell.OnPiecePlacedEventArgs e)
@@ -205,6 +213,40 @@ namespace GameVisual
         private void PieceVisual_OnMouseUp(object sender, MouseEventArgs e)
         {
             isDragging = false;
+        }
+    }
+
+    public sealed class PieceSpawner : PictureBox
+    {
+        public event EventHandler OnPiecePlaced;
+
+        private Piece piece;
+
+        public PieceSpawner(Piece piece, Point location, Control.ControlCollection controls)
+        {
+            this.piece = piece;
+            Location = location;
+            BackColor = Color.Red;
+            Size = new Size(40, 40);
+            Cursor = Cursors.Hand;
+
+            BackgroundImage = PieceImageResolver.GetImage(piece);
+            BackgroundImageLayout = ImageLayout.Stretch;
+
+            controls.Add(this);
+
+            MouseMove += OnMouseMove;
+        }
+
+        public Piece GetPiece()
+        {
+            OnPiecePlaced?.Invoke(this, EventArgs.Empty);
+            return piece.Clone();
+        }
+
+    private void OnMouseMove(object sender, MouseEventArgs e)
+        {
+            DoDragDrop(this, DragDropEffects.Move);
         }
     }
 

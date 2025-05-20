@@ -26,7 +26,7 @@ namespace Chess
 
         public void StartGame(Control.ControlCollection controls)
         {
-            strategy = new PvPStrategy(controls);
+            strategy = new ModelingStrategy(controls);
 
             strategy.OnPieceSelected += Strategy_OnPieceSelected;
             strategy.OnPieceMoved += Strategy_OnPieceMoved;
@@ -34,7 +34,7 @@ namespace Chess
 
         private void Strategy_OnPieceMoved(object sender, PieceMovedEventArgs e)
         {
-            if (strategy is PvPStrategy)
+            if (strategy is PvPStrategy or ModelingStrategy)
             {
                 CurrentColorMove = CurrentColorMove == CurrentMove.White ? CurrentMove.Black : CurrentMove.White;
             }
@@ -180,6 +180,86 @@ namespace Chess
             }
         }
     }
+
+    public class ModelingStrategy : IGameModeStrategy
+    {
+        public event EventHandler<PieceEventArgs> OnPieceSelected;
+        public event EventHandler<PieceMovedEventArgs> OnPieceMoved;
+
+        private bool isWhiteMove = true;
+        private readonly Button deleteButton;
+
+        public ModelingStrategy(Control.ControlCollection controls)
+        {
+            BoardVisual boardVisual = new(this, controls, new Point(100, 100));
+
+            boardVisual.PlacePiece(4, 0, new King(false));
+            boardVisual.PlacePiece(4, 7, new King(true));
+
+            PieceSpawner whitePawnSpawner = new(new Pawn(true), new Point(0, 0), controls);
+            PieceSpawner whiteKnightSpawner = new(new Knight(true), new Point(40, 0), controls);
+            PieceSpawner whiteBishopSpawner = new(new Bishop(true), new Point(80, 0), controls);
+            PieceSpawner whiteRookSpawner = new(new Rook(true), new Point(120, 0), controls);
+            PieceSpawner whiteQueenSpawner = new(new Queen(true), new Point(160, 0), controls);
+
+            PieceSpawner blackPawnSpawner = new(new Pawn(false), new Point(0, 40), controls);
+            PieceSpawner blackKnightSpawner = new(new Knight(false), new Point(40, 40), controls);
+            PieceSpawner blackBishopSpawner = new(new Bishop(false), new Point(80, 40), controls);
+            PieceSpawner blackRookSpawner = new(new Rook(false), new Point(120, 40), controls);
+            PieceSpawner blackQueenSpawner = new(new Queen(false), new Point(160, 40), controls);
+
+            deleteButton = new Button
+            {
+                Location = new Point(400, 40),
+                Size = new Size(50, 20),
+                BackColor = Color.Beige,
+                Text = "Delete"
+            };
+            deleteButton.Click += DeleteButton_OnClick;
+            controls.Add(deleteButton);
+            deleteButton.Hide();
+        }
+
+        private void DeleteButton_OnClick(object sender, EventArgs e)
+        {
+            DeleteSelectedPiece();
+        }
+
+        public void SelectPiece(Piece p)
+        {
+            if (p.IsWhite == isWhiteMove)
+            {
+                OnPieceSelected?.Invoke(this, new PieceEventArgs { Piece = p });
+                if (p is not King)
+                    deleteButton.Show();
+                else
+                    deleteButton.Hide();
+            }
+        }
+
+        public void MakeMove(Piece piece, Cell targetCell)
+        {
+            if(targetCell.IsOccupied() && targetCell.Piece is King)
+                return;
+            Cell fromCell = piece.CurrentCell;
+            if (piece.CurrentCell.TryMovePieceTo(targetCell))
+            {
+                OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() { Piece = piece, From = fromCell });
+                isWhiteMove = !isWhiteMove;
+            }
+        }
+
+        private void DeleteSelectedPiece()
+        {
+            Piece p = PieceSelection.Instance.CurrentSelected;
+            if (p != null && p is not King)
+            {
+                p.DetachAllObservers();
+                p.CurrentCell.RemovePiece();
+            }
+        }
+    }
+
 
     public class PieceEventArgs : EventArgs
     {

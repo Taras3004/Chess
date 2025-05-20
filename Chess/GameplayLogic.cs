@@ -308,7 +308,7 @@ namespace GameModel
             observers.Add(cell);
         }
 
-        private void DetachAllObservers()
+        public void DetachAllObservers()
         {
             foreach (var observer in observers)
             {
