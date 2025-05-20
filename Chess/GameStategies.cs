@@ -26,7 +26,7 @@ namespace Chess
 
         public void StartGame(Control.ControlCollection controls)
         {
-            strategy = new ModelingStrategy(controls);
+            strategy = new PvBStrategy(controls);
 
             strategy.OnPieceSelected += Strategy_OnPieceSelected;
             strategy.OnPieceMoved += Strategy_OnPieceMoved;
@@ -35,9 +35,7 @@ namespace Chess
         private void Strategy_OnPieceMoved(object sender, PieceMovedEventArgs e)
         {
             if (strategy is PvPStrategy or ModelingStrategy)
-            {
                 CurrentColorMove = CurrentColorMove == CurrentMove.White ? CurrentMove.Black : CurrentMove.White;
-            }
             else if (strategy is PvBStrategy)
                 CurrentColorMove = CurrentColorMove == CurrentMove.White ? CurrentMove.None : CurrentMove.White;
         }
@@ -72,16 +70,31 @@ namespace Chess
         {
             BoardVisual boardVisual = new(this, controls, new Point(100, 100));
 
-            boardVisual.PlacePiece(1, 4, new Pawn(true));
-            boardVisual.PlacePiece(4, 7, new King(true));
+            for (int i = 0; i < 8; i++)
+            {
+                boardVisual.PlacePiece(i, 6, new Pawn(true));
+            }
             boardVisual.PlacePiece(0, 7, new Rook(true));
-            //boardVisual.PlacePiece(7, 7, new Rook(true));
+            boardVisual.PlacePiece(1, 7, new Knight(true));
+            boardVisual.PlacePiece(2, 7, new Bishop(true));
+            boardVisual.PlacePiece(3, 7, new Queen(true));
+            boardVisual.PlacePiece(4, 7, new King(true));
+            boardVisual.PlacePiece(5, 7, new Bishop(true));
+            boardVisual.PlacePiece(6, 7, new Knight(true));
+            boardVisual.PlacePiece(7, 7, new Rook(true));
 
-            boardVisual.PlacePiece(0, 1, new Pawn(false));
-            boardVisual.PlacePiece(2, 1, new Pawn(false));
-            boardVisual.PlacePiece(3, 0, new King(false));
-            //boardVisual.PlacePiece(1, 5, new Bishop(false));
-            //boardVisual.PlacePiece(3, 5, new Bishop(false));
+            for (int i = 0; i < 8; i++)
+            {
+                boardVisual.PlacePiece(i, 1, new Pawn(false));
+            }
+            boardVisual.PlacePiece(0, 0, new Rook(false));
+            boardVisual.PlacePiece(1, 0, new Knight(false));
+            boardVisual.PlacePiece(2, 0, new Bishop(false));
+            boardVisual.PlacePiece(3, 0, new Queen(false));
+            boardVisual.PlacePiece(4, 0, new King(false));
+            boardVisual.PlacePiece(5, 0, new Bishop(false));
+            boardVisual.PlacePiece(6, 0, new Knight(false));
+            boardVisual.PlacePiece(7, 0, new Rook(false));
         }
 
         public void SelectPiece(Piece p)
@@ -109,7 +122,7 @@ namespace Chess
         public event EventHandler<PieceEventArgs> OnPieceSelected;
         public event EventHandler<PieceMovedEventArgs> OnPieceMoved;
 
-        private bool isBotMove = false;
+        private bool isBotMove;
         private readonly Bot bot = new();
         private readonly Timer timer;
         private Board board;
@@ -139,22 +152,31 @@ namespace Chess
         {
             BoardVisual boardVisual = new(this, controls, new Point(100, 100));
 
+            for (int i = 0; i < 8; i++)
+            {
+                boardVisual.PlacePiece(i, 6, new Pawn(true));
+            }
             boardVisual.PlacePiece(0, 7, new Rook(true));
+            boardVisual.PlacePiece(1, 7, new Knight(true));
+            boardVisual.PlacePiece(2, 7, new Bishop(true));
+            boardVisual.PlacePiece(3, 7, new Queen(true));
+            boardVisual.PlacePiece(4, 7, new King(true));
+            boardVisual.PlacePiece(5, 7, new Bishop(true));
+            boardVisual.PlacePiece(6, 7, new Knight(true));
             boardVisual.PlacePiece(7, 7, new Rook(true));
 
-            boardVisual.PlacePiece(2, 7, new King(true));
-            boardVisual.PlacePiece(3, 7, new Knight(true));
-
-
-            boardVisual.PlacePiece(0, 0, new King(false));
-            boardVisual.PlacePiece(0, 1, new Pawn(false));
-            boardVisual.PlacePiece(1, 1, new Pawn(false));
-            boardVisual.PlacePiece(2, 1, new Pawn(false));
-            boardVisual.PlacePiece(3, 1, new Pawn(false));
-            boardVisual.PlacePiece(4, 1, new Pawn(false));
-            boardVisual.PlacePiece(5, 1, new Pawn(false));
-            boardVisual.PlacePiece(6, 1, new Pawn(false));
-            boardVisual.PlacePiece(7, 1, new Pawn(false));
+            for (int i = 0; i < 8; i++)
+            {
+                boardVisual.PlacePiece(i, 1, new Pawn(false));
+            }
+            boardVisual.PlacePiece(0, 0, new Rook(false));
+            boardVisual.PlacePiece(1, 0, new Knight(false));
+            boardVisual.PlacePiece(2, 0, new Bishop(false));
+            boardVisual.PlacePiece(3, 0, new Queen(false));
+            boardVisual.PlacePiece(4, 0, new King(false));
+            boardVisual.PlacePiece(5, 0, new Bishop(false));
+            boardVisual.PlacePiece(6, 0, new Knight(false));
+            boardVisual.PlacePiece(7, 0, new Rook(false));
 
             board = boardVisual.board;
         }
@@ -256,6 +278,7 @@ namespace Chess
             {
                 p.DetachAllObservers();
                 p.CurrentCell.RemovePiece();
+                deleteButton.Hide();
             }
         }
     }

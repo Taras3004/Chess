@@ -35,6 +35,21 @@ namespace GameVisual
             board.OnKingMated += Board_OnKingMated;
             board.OnKingChecked += Board_OnKingChecked;
             board.OnStalemateHappened += Board_OnStalemateHappened;
+            board.OnPawnPromoted += Board_OnPawnPromoted;
+        }
+
+        private void Board_OnPawnPromoted(object sender, PieceEventArgs e)
+        {
+            if (board.Strategy is PvBStrategy && e.Piece.IsWhite == false)
+            {
+                Cell pawnCell = e.Piece.CurrentCell;
+                pawnCell.RemovePiece();
+                pawnCell.PlacePiece(new Queen(false));
+                return;
+            }
+            ChoosePiece choosePieceForm = new ChoosePiece(e.Piece as Pawn);
+
+            if (choosePieceForm.ShowDialog() == DialogResult.OK) { }
         }
 
         private void Board_OnStalemateHappened(object sender, EventArgs e)

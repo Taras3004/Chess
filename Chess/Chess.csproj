@@ -48,6 +48,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ChoosePiece.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="ChoosePiece.Designer.cs">
+      <DependentUpon>ChoosePiece.cs</DependentUpon>
+    </Compile>
     <Compile Include="GameplayLogic.cs" />
     <Compile Include="GameStategies.cs" />
     <Compile Include="GameplayVisual.cs" />
@@ -59,6 +65,9 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="ChoosePiece.resx">
+      <DependentUpon>ChoosePiece.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
     </EmbeddedResource>

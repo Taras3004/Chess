@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Windows.Forms;
 using Chess;
 
 namespace GameModel
@@ -14,6 +13,8 @@ namespace GameModel
         public event EventHandler<PieceEventArgs> OnKingChecked;
         public event EventHandler<PieceEventArgs> OnKingMated;
         public event EventHandler OnStalemateHappened;
+        public event EventHandler<PieceEventArgs> OnPawnPromoted;
+        
 
         public Pawn LastPawnDoubleMove { get; private set; } = null;
 
@@ -71,9 +72,7 @@ namespace GameModel
             int endRow = pawn.IsWhite ? 0 : 7;
             if (pawn.CurrentCell.Position.Y == endRow)
             {
-                Cell endCell = pawn.CurrentCell;
-                pawn.CurrentCell.RemovePiece();
-                endCell.PlacePiece(new Queen(pawn.IsWhite)); //   CHOOSE PIECE
+                OnPawnPromoted?.Invoke(this, new PieceEventArgs {Piece = pawn});
             }
         }
 

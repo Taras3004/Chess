@@ -1,6 +1,6 @@
 ﻿namespace Chess
 {
-    partial class Form1
+    partial class ChoosePiece
     {
         /// <summary>
         /// Required designer variable.
@@ -30,16 +30,16 @@
         {
             this.SuspendLayout();
             // 
-            // Form1
+            // ChoosePiece
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.Black;
-            this.ClientSize = new System.Drawing.Size(784, 761);
-            this.Name = "Form1";
+            this.BackColor = System.Drawing.Color.DarkGray;
+            this.ClientSize = new System.Drawing.Size(250, 100);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+            this.Name = "ChoosePiece";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Form1";
-            this.Click += new System.EventHandler(this.Form1_Click);
+            this.Text = "ChoosePiece";
             this.ResumeLayout(false);
 
         }
@@ -47,4 +47,3 @@
         #endregion
     }
 }
-
