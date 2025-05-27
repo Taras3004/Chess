@@ -6,11 +6,11 @@ using GameVisual;
 
 namespace Chess
 {
-    public partial class ChoosePiece : Form
+    public partial class fChoosePiece : Form
     {
         private readonly Pawn promotedPawn;
 
-        public ChoosePiece(Pawn pawn)
+        public fChoosePiece(Pawn pawn)
         {
             InitializeComponent();
             promotedPawn = pawn;
@@ -19,7 +19,6 @@ namespace Chess
             PieceButton bishopButton = new PieceButton(new Bishop(pawn.IsWhite), new Point(75, 25));
             PieceButton rookButton = new PieceButton(new Rook(pawn.IsWhite), new Point(125, 25));
             PieceButton queenButton = new PieceButton(new Queen(pawn.IsWhite), new Point(175, 25));
-
 
             knightButton.OnPieceButtonClicked += PieceButton_OnClick;
             bishopButton.OnPieceButtonClicked += PieceButton_OnClick;
@@ -47,8 +46,8 @@ namespace Chess
     {
         public event EventHandler<PieceEventArgs> OnPieceButtonClicked;
 
-        public const int CELL_SiZE = 50;
-        public Piece Piece { get; }
+        private const int CELL_SiZE = 50;
+        private Piece Piece { get; }
 
         public PieceButton(Piece piece, Point location)
         {

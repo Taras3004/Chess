@@ -130,12 +130,7 @@ namespace GameModel
 
     public class Cell(Point position, Board board)
     {
-        public class OnPiecePlacedEventArgs : EventArgs
-        {
-            public Piece Piece;
-        }
-
-        public event EventHandler<OnPiecePlacedEventArgs> OnPieceChanged;
+        public event EventHandler<PieceEventArgs> OnPieceChanged;
         public event Action<bool> OnCellHighlighted;
 
         public bool IsWhite => (position.X + position.Y) % 2 == 0;
@@ -145,7 +140,7 @@ namespace GameModel
 
         public void PlacePiece(Piece p)
         {
-            OnPieceChanged?.Invoke(this, new OnPiecePlacedEventArgs
+            OnPieceChanged?.Invoke(this, new PieceEventArgs
             {
                 Piece = p
             });
@@ -160,7 +155,7 @@ namespace GameModel
                 return;
             Piece = null;
 
-            OnPieceChanged?.Invoke(this, new OnPiecePlacedEventArgs
+            OnPieceChanged?.Invoke(this, new PieceEventArgs
             {
                 Piece = null
             });
@@ -193,6 +188,8 @@ namespace GameModel
 
     public class PieceSelection
     {
+        public event EventHandler OnPieceDeselected;
+
         public static PieceSelection Instance => instance ??= new PieceSelection();
         private static PieceSelection instance;
 
@@ -253,6 +250,7 @@ namespace GameModel
         {
             if (CurrentSelected != null)
             {
+                OnPieceDeselected?.Invoke(this, EventArgs.Empty);
                 CurrentSelected.UpdateObservers(false);
                 CurrentSelected = null;
             }
@@ -263,16 +261,12 @@ namespace GameModel
     {
         private readonly List<Cell> observers = [];
         private Cell currentCell;
-
         public bool IsWhite { get; } = isWhite;
-
         public Cell CurrentCell => currentCell;
-
-        public abstract List<Cell> GetAllMoves();
-        public abstract Piece Clone();
-
         public List<Cell> PossibleMoves => CalculatePossibleMoves();
-
+        
+        public abstract Piece Clone();
+        public abstract List<Cell> GetAllMoves();
 
         protected bool IsInBounds(int x, int y) => x is >= 0 and < 8 && y is >= 0 and < 8;
 
@@ -357,7 +351,6 @@ namespace GameModel
 
             List<(Piece attackedBy, Cell attackedCell)> attackedCells =
                 BoardManipulations.GetAttackedCells(clonedBoard.BoardCells, !IsWhite);
-            bool isKingUnderThreat;
 
             if (isKing)
             {
@@ -395,13 +388,29 @@ namespace GameModel
                     }
                 }
 
-                isKingUnderThreat = attackedCells.Any(x => x.attackedCell.Position == toCell.Position);
+                foreach ((Piece attackedBy, Cell attackedCell) in attackedCells)
+                {
+                    if (attackedCell == king.currentCell)
+                    {
+                        clonedBoard.DeleteBoard();
+                        return true;
+                    }
+                }
             }
             else
-                isKingUnderThreat = attackedCells.Any(x => x.attackedCell.Position.Equals(king.currentCell.Position));
+            {
+                foreach ((Piece attackedBy, Cell attackedCell)  in attackedCells)
+                {
+                    if (attackedCell == king.currentCell)
+                    {
+                        clonedBoard.DeleteBoard();
+                        return true;
+                    }
+                }
+            }
 
             clonedBoard.DeleteBoard();
-            return isKingUnderThreat;
+            return false;
         }
     }
 
@@ -775,7 +784,6 @@ namespace GameModel
                     possibleMoves.Add((king, move));
                 }
             }
-
 
             foreach ((Piece piece, Cell move) in possibleMoves)
             {

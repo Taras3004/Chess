@@ -24,7 +24,7 @@ namespace GameVisual
             {
                 for (int j = 0; j < BOARD_SIZE; j++)
                 {
-                    cellsVisuals[i, j] = new CellVisual(new Point(i, j), board.BoardCells[i, j])
+                    cellsVisuals[i, j] = new CellVisual(board.BoardCells[i, j])
                     {
                         Location = new Point(cellSize * i + gap * i + offset.X, cellSize * j + gap * j + offset.Y)
                     };
@@ -47,24 +47,25 @@ namespace GameVisual
                 pawnCell.PlacePiece(new Queen(false));
                 return;
             }
-            ChoosePiece choosePieceForm = new ChoosePiece(e.Piece as Pawn);
+            fChoosePiece choosePieceForm = new fChoosePiece(e.Piece as Pawn);
 
             if (choosePieceForm.ShowDialog() == DialogResult.OK) { }
         }
 
         private void Board_OnStalemateHappened(object sender, EventArgs e)
         {
-            MessageBox.Show("Stalemate!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Stalemate!", "Stalemate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private void Board_OnKingMated(object sender, PieceEventArgs e)
         {
-            MessageBox.Show("Mate!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            string kingColor = e.Piece.IsWhite ? "White" : "Black";
+            MessageBox.Show($"{kingColor} king mated!", "Mate", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private void Board_OnKingChecked(object sender, PieceEventArgs e)
         {
-            MessageBox.Show("Check!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            //MessageBox.Show("Check!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         public void PlacePiece(int x, int y, Piece piece)
@@ -82,7 +83,7 @@ namespace GameVisual
 
         public bool isHighlighted { get; private set; }
 
-        public CellVisual(Point position, Cell cell)
+        public CellVisual(Cell cell)
         {
             cellLogic = cell;
             Size = new Size(CELL_SIZE, CELL_SIZE);
@@ -110,7 +111,7 @@ namespace GameVisual
                     (CELL_SIZE - MARK_SIZE) / 2,
                     (CELL_SIZE - MARK_SIZE) / 2),
                 Size = new Size(MARK_SIZE, MARK_SIZE),
-                BackColor = Color.Green
+                BackColor = Color.DarkGreen
             };
             Controls.Add(highlightMark);
             highlightMark.BringToFront();
@@ -156,7 +157,7 @@ namespace GameVisual
             }
         }
 
-        private void CellLogic_OnPieceChanged(object sender, Cell.OnPiecePlacedEventArgs e)
+        private void CellLogic_OnPieceChanged(object sender, PieceEventArgs e)
         {
             if (e.Piece == null && currPiece != null)
             {
@@ -182,7 +183,7 @@ namespace GameVisual
 
         private const int PIECE_SIZE = 50;
         private Point mouseDownLocation;
-        private static bool isDragging = true;
+        private bool isDragging;
 
         public PieceVisual(Piece piece)
         {
@@ -193,6 +194,8 @@ namespace GameVisual
 
             BackgroundImage = PieceImageResolver.GetImage(piece);
             BackgroundImageLayout = ImageLayout.Stretch;
+
+            isDragging = true;
 
             MouseDown += PieceVisual_OnMouseDown;
             MouseMove += PieceVisual_OnMouseMove;
@@ -241,7 +244,7 @@ namespace GameVisual
         {
             this.piece = piece;
             Location = location;
-            BackColor = Color.Red;
+            BackColor = Color.DarkGray;
             Size = new Size(40, 40);
             Cursor = Cursors.Hand;
 
