@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using GameModel;
 using GameVisual;
@@ -128,28 +129,11 @@ namespace Chess
 
         private bool isBotMove;
         private readonly Bot bot = new();
-        private Timer timer;
         private Board board;
 
         public void Init(Control.ControlCollection controls)
         {
             CreateBoard(controls);
-            timer = new Timer();
-            timer.Interval = 1000;
-            timer.Tick += Timer_OnTick;
-        }
-
-        private void Timer_OnTick(object sender, EventArgs e)
-        {
-            timer.Stop();
-            if (BoardManipulations.GetKing(board, false).IsCheckmated())
-                return;
-
-            var botDecision = bot.FindBestBotMove(board);
-            Cell fromCell = botDecision.piece.CurrentCell;
-            botDecision.piece.CurrentCell.TryMovePieceTo(botDecision.move);
-            isBotMove = !isBotMove;
-            OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() {Piece = botDecision.piece, From = fromCell});
         }
 
         private void CreateBoard(Control.ControlCollection controls)
@@ -193,7 +177,7 @@ namespace Chess
             }
         }
 
-        public void MakeMove(Piece piece, Cell targetCell)
+        public async void MakeMove(Piece piece, Cell targetCell)
         {
             Cell fromCell = piece.CurrentCell;
             if (piece.CurrentCell.TryMovePieceTo(targetCell))
@@ -201,19 +185,36 @@ namespace Chess
                 isBotMove = !isBotMove;
                 OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() {Piece = piece, From = fromCell});
                 board = targetCell.Board;
+                await Task.Delay(1000);
 
-                timer.Start();
+                if (BoardManipulations.GetKing(board, false).IsCheckmated())
+                    return;
+
+                var botDecision = bot.FindBestBotMove(board);
+                Cell botFromCell = botDecision.piece.CurrentCell;
+                botDecision.piece.CurrentCell.TryMovePieceTo(botDecision.move);
+                isBotMove = !isBotMove;
+                OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() { Piece = botDecision.piece, From = botFromCell });
             }
         }
     }
 
     public class ModelingStrategy : IGameModeStrategy
     {
+        private enum StrategyState
+        {
+            Modelling, 
+            Playing
+        }
+
         public event EventHandler<PieceEventArgs> OnPieceSelected;
         public event EventHandler<PieceMovedEventArgs> OnPieceMoved;
 
+        private StrategyState strategyState = StrategyState.Modelling;
         private bool isWhiteMove = true;
         private Button deleteButton;
+        private Button startButton;
+        private Piece selectedPiece;
 
         public void Init(Control.ControlCollection controls)
         {
@@ -222,23 +223,23 @@ namespace Chess
             boardVisual.PlacePiece(4, 0, new King(false));
             boardVisual.PlacePiece(4, 7, new King(true));
 
-            PieceSpawner whitePawnSpawner = new(new Pawn(true), new Point(200, 520), controls);
-            PieceSpawner whiteKnightSpawner = new(new Knight(true), new Point(240, 520), controls);
-            PieceSpawner whiteBishopSpawner = new(new Bishop(true), new Point(280, 520), controls);
-            PieceSpawner whiteRookSpawner = new(new Rook(true), new Point(320, 520), controls);
-            PieceSpawner whiteQueenSpawner = new(new Queen(true), new Point(360, 520), controls);
+            PieceSpawner whitePawnSpawner = new(new Pawn(true), new Point(200, 560), controls);
+            PieceSpawner whiteKnightSpawner = new(new Knight(true), new Point(240, 560), controls);
+            PieceSpawner whiteBishopSpawner = new(new Bishop(true), new Point(280, 560), controls);
+            PieceSpawner whiteRookSpawner = new(new Rook(true), new Point(320, 560), controls);
+            PieceSpawner whiteQueenSpawner = new(new Queen(true), new Point(360, 560), controls);
 
-            PieceSpawner blackPawnSpawner = new(new Pawn(false), new Point(200, 480), controls);
-            PieceSpawner blackKnightSpawner = new(new Knight(false), new Point(240, 480), controls);
-            PieceSpawner blackBishopSpawner = new(new Bishop(false), new Point(280, 480), controls);
-            PieceSpawner blackRookSpawner = new(new Rook(false), new Point(320, 480), controls);
-            PieceSpawner blackQueenSpawner = new(new Queen(false), new Point(360, 480), controls);
+            PieceSpawner blackPawnSpawner = new(new Pawn(false), new Point(200, 520), controls);
+            PieceSpawner blackKnightSpawner = new(new Knight(false), new Point(240, 520), controls);
+            PieceSpawner blackBishopSpawner = new(new Bishop(false), new Point(280, 520), controls);
+            PieceSpawner blackRookSpawner = new(new Rook(false), new Point(320, 520), controls);
+            PieceSpawner blackQueenSpawner = new(new Queen(false), new Point(360, 520), controls);
 
             PieceSelection.Instance.OnPieceDeselected += PieceSelection_OnPieceDeselected;
 
             deleteButton = new Button
             {
-                Location = new Point(525, 290),
+                Location = new Point(550, 290),
                 Size = new Size(50, 20),
                 BackColor = Color.Beige,
                 Text = "Delete"
@@ -246,6 +247,22 @@ namespace Chess
             deleteButton.Click += DeleteButton_OnClick;
             controls.Add(deleteButton);
             deleteButton.Hide();
+
+            startButton = new Button
+            {
+                Location = new Point(550, 315),
+                Size = new Size(50, 20),
+                BackColor = Color.Beige,
+                Text = "Start"
+            };
+            startButton.Click += StartButton_OnClick;
+            controls.Add(startButton);
+        }
+
+        private void StartButton_OnClick(object sender, EventArgs e)
+        {
+            strategyState = StrategyState.Playing;
+            startButton.Hide();
         }
 
         private void PieceSelection_OnPieceDeselected(object sender, EventArgs e)
@@ -255,24 +272,24 @@ namespace Chess
 
         private void DeleteButton_OnClick(object sender, EventArgs e)
         {
-            Piece p = PieceSelection.Instance.CurrentSelected;
-            if (p != null && p is not King)
+            if (selectedPiece != null && selectedPiece is not King)
             {
-                p.DetachAllObservers();
-                p.CurrentCell.RemovePiece();
+                selectedPiece.DetachAllObservers();
+                selectedPiece.CurrentCell.RemovePiece();
                 deleteButton.Hide();
             }
         }
 
         public void SelectPiece(Piece p)
         {
-            if (p.IsWhite == isWhiteMove)
+            if (strategyState == StrategyState.Modelling)
+            {
+                deleteButton.Show();
+                selectedPiece = p;
+            }
+            else if (p.IsWhite == isWhiteMove)
             {
                 OnPieceSelected?.Invoke(this, new PieceEventArgs { Piece = p });
-                if (p is not King)
-                    deleteButton.Show();
-                else
-                    deleteButton.Hide();
             }
         }
 

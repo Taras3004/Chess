@@ -4,6 +4,7 @@ using GameModel;
 using System.Windows.Forms;
 using Chess;
 using Chess.Properties;
+using System.Runtime.CompilerServices;
 
 namespace GameVisual
 {
@@ -28,6 +29,33 @@ namespace GameVisual
                     {
                         Location = new Point(cellSize * i + gap * i + offset.X, cellSize * j + gap * j + offset.Y)
                     };
+
+                    const int labelSize = 20;
+                    if (i is 0 or 7)
+                    {
+                        int textOffsetX = i == 0? cellsVisuals[i, j].Location.X + cellSize / 2 - 50 - labelSize / 2:
+                            cellsVisuals[i, j].Location.X + cellSize / 2 + 50 - labelSize / 2;
+                        string text = Math.Abs(j - 8).ToString();
+
+                        Label rowNumber = GenerateLabel(text, 
+                            new Point(textOffsetX, cellsVisuals[i, j].Location.Y + cellSize / 2 - labelSize / 2),
+                            new Size(labelSize, labelSize));
+
+                        controls.Add(rowNumber);
+                    }
+
+                    if (j is 0 or 7)
+                    {
+                        int textOffsetY = j == 0 ? cellsVisuals[i, j].Location.Y + cellSize / 2 - 50 - labelSize / 2 :
+                            cellsVisuals[i, j].Location.Y + cellSize / 2 + 50 - labelSize / 2;
+                        char letter = (char)('A' + i);
+
+                        Label colLetter = GenerateLabel(letter.ToString(),
+                            new Point(cellsVisuals[i, j].Location.X + cellSize / 2 - labelSize / 2, textOffsetY),
+                            new Size(labelSize, labelSize));
+
+                        controls.Add(colLetter);
+                    }
                     controls.Add(cellsVisuals[i, j]);
                 }
             }
@@ -36,6 +64,20 @@ namespace GameVisual
             board.OnKingChecked += Board_OnKingChecked;
             board.OnStalemateHappened += Board_OnStalemateHappened;
             board.OnPawnPromoted += Board_OnPawnPromoted;
+        }
+
+        private Label GenerateLabel(string text, Point location, Size size)
+        {
+            Label label = new Label()
+            {
+                Location = location,
+                Size = size,
+                Text = text,
+                ForeColor = Color.White,
+                Font = new Font("Arial Rounded MT", 14, FontStyle.Bold)
+            };
+
+            return label;
         }
 
         private void Board_OnPawnPromoted(object sender, PieceEventArgs e)
@@ -65,7 +107,7 @@ namespace GameVisual
 
         private void Board_OnKingChecked(object sender, PieceEventArgs e)
         {
-            //MessageBox.Show("Check!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show("Check!", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         public void PlacePiece(int x, int y, Piece piece)
@@ -238,7 +280,7 @@ namespace GameVisual
     {
         public event EventHandler OnPiecePlaced;
 
-        private Piece piece;
+        private readonly Piece piece;
 
         public PieceSpawner(Piece piece, Point location, Control.ControlCollection controls)
         {
@@ -272,32 +314,22 @@ namespace GameVisual
     {
         public static Image GetImage(Piece piece)
         {
-            if (piece is Pawn && piece.IsWhite)
-                return Resources.Chess_plt60;
-            if (piece is Knight && piece.IsWhite)
-                return Resources.Chess_nlt60;
-            if (piece is Bishop && piece.IsWhite)
-                return Resources.Chess_blt60;
-            if (piece is Queen && piece.IsWhite)
-                return Resources.Chess_qlt60;
-            if (piece is King && piece.IsWhite)
-                return Resources.Chess_klt60;
-            if (piece is Rook && piece.IsWhite)
-                return Resources.Chess_rlt60;
-
-            if (piece is Pawn && !piece.IsWhite)
-                return Resources.Chess_pdt60;
-            if (piece is Knight && !piece.IsWhite)
-                return Resources.Chess_ndt60;
-            if (piece is Bishop && !piece.IsWhite)
-                return Resources.Chess_bdt60;
-            if (piece is Queen && !piece.IsWhite)
-                return Resources.Chess_qdt60;
-            if (piece is King && !piece.IsWhite)
-                return Resources.Chess_kdt60;
-            if (piece is Rook && !piece.IsWhite)
-                return Resources.Chess_rdt60;
-            return null;
+            return piece switch
+            {
+                Pawn when piece.IsWhite => Resources.Chess_plt60,
+                Knight when piece.IsWhite => Resources.Chess_nlt60,
+                Bishop when piece.IsWhite => Resources.Chess_blt60,
+                Queen when piece.IsWhite => Resources.Chess_qlt60,
+                King when piece.IsWhite => Resources.Chess_klt60,
+                Rook when piece.IsWhite => Resources.Chess_rlt60,
+                Pawn when !piece.IsWhite => Resources.Chess_pdt60,
+                Knight when !piece.IsWhite => Resources.Chess_ndt60,
+                Bishop when !piece.IsWhite => Resources.Chess_bdt60,
+                Queen when !piece.IsWhite => Resources.Chess_qdt60,
+                King when !piece.IsWhite => Resources.Chess_kdt60,
+                Rook when !piece.IsWhite => Resources.Chess_rdt60,
+                _ => null
+            };
         }
     }
 }

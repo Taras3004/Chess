@@ -14,7 +14,7 @@ namespace GameModel
         public event EventHandler<PieceEventArgs> OnKingMated;
         public event EventHandler OnStalemateHappened;
         public event EventHandler<PieceEventArgs> OnPawnPromoted;
-        
+
 
         public Pawn LastPawnDoubleMove { get; private set; } = null;
 
@@ -50,7 +50,6 @@ namespace GameModel
                 {
                     pawn.EnPassant.RemovePiece();
                 }
-
             }
             else
                 LastPawnDoubleMove = null;
@@ -72,7 +71,7 @@ namespace GameModel
             int endRow = pawn.IsWhite ? 0 : 7;
             if (pawn.CurrentCell.Position.Y == endRow)
             {
-                OnPawnPromoted?.Invoke(this, new PieceEventArgs {Piece = pawn});
+                OnPawnPromoted?.Invoke(this, new PieceEventArgs { Piece = pawn });
             }
         }
 
@@ -264,7 +263,7 @@ namespace GameModel
         public bool IsWhite { get; } = isWhite;
         public Cell CurrentCell => currentCell;
         public List<Cell> PossibleMoves => CalculatePossibleMoves();
-        
+
         public abstract Piece Clone();
         public abstract List<Cell> GetAllMoves();
 
@@ -360,7 +359,8 @@ namespace GameModel
                 {
                     if (toCell.Position == new Point(6, row))
                     {
-                        var pathCells = new[] {
+                        var pathCells = new[]
+                        {
                             clonedBoard.BoardCells[5, row],
                             clonedBoard.BoardCells[6, row]
                         };
@@ -374,7 +374,8 @@ namespace GameModel
                     }
                     else if (toCell.Position == new Point(2, row))
                     {
-                        var pathCells = new[] {
+                        var pathCells = new[]
+                        {
                             clonedBoard.BoardCells[3, row],
                             clonedBoard.BoardCells[2, row]
                         };
@@ -399,7 +400,7 @@ namespace GameModel
             }
             else
             {
-                foreach ((Piece attackedBy, Cell attackedCell)  in attackedCells)
+                foreach ((Piece attackedBy, Cell attackedCell) in attackedCells)
                 {
                     if (attackedCell == king.currentCell)
                     {
@@ -477,7 +478,6 @@ namespace GameModel
                 doubleMovedPawn.CurrentCell.Position.Y == CurrentCell.Position.Y &&
                 Math.Abs(doubleMovedPawn.CurrentCell.Position.X - CurrentCell.Position.X) == 1)
             {
-                
                 int dir = IsWhite ? -1 : 1;
                 EnPassant = doubleMovedPawn.CurrentCell;
                 moves.Add(CurrentCell.Board.BoardCells[EnPassant.Position.X, EnPassant.Position.Y + 1 * dir]);
@@ -643,7 +643,7 @@ namespace GameModel
                 bool IsAvailable(Point cellPosition)
                 {
                     return IsInBounds(cellPosition.X, cellPosition.Y) &&
-                        !boardCells[cellPosition.X, cellPosition.Y].IsOccupied();
+                           !boardCells[cellPosition.X, cellPosition.Y].IsOccupied();
                 }
             }
 
@@ -746,7 +746,7 @@ namespace GameModel
             {
                 for (int y = 0; y < 8; y++)
                 {
-                    var piece = board.BoardCells[x, y].Piece;
+                    Piece piece = board.BoardCells[x, y].Piece;
                     if (piece == null) continue;
 
                     int value = piece switch
@@ -756,7 +756,7 @@ namespace GameModel
                         Bishop => 3,
                         Rook => 5,
                         Queen => 9,
-                        King => -1,
+                        King => 100,
                         _ => throw new ArgumentOutOfRangeException()
                     };
 
@@ -770,9 +770,11 @@ namespace GameModel
         public (Piece piece, Cell move) FindBestBotMove(Board originalBoard)
         {
             int bestScore = int.MinValue;
+            Random rnd = new Random();
+
             List<(Piece, Cell)> possibleMoves = BoardManipulations.GetAllMoves(originalBoard, false);
-            ;
-            (Piece piece, Cell move) bestMove = (null, null);
+            
+            List<(Piece piece, Cell move)> bestMoves = new();
 
             King king = BoardManipulations.GetKing(originalBoard, false);
 
@@ -794,34 +796,86 @@ namespace GameModel
 
                 from.TryMovePieceTo(to);
 
-                int worstResponse = int.MaxValue;
-                foreach ((Piece playerPiece, Cell playerMove) in BoardManipulations.GetAllMoves(boardClone, true))
-                {
-                    Board simBoard = BoardManipulations.CloneBoard(boardClone);
-                    Cell pFrom = simBoard.BoardCells[playerPiece.CurrentCell.Position.X,
-                        playerPiece.CurrentCell.Position.Y];
-                    Cell pTo = simBoard.BoardCells[playerMove.Position.X, playerMove.Position.Y];
-
-                    pFrom.TryMovePieceTo(pTo);
-
-                    int score = EvaluateBoard(simBoard);
-                    if (score < worstResponse)
-                        worstResponse = score;
-
-                    simBoard.DeleteBoard();
-                }
+                const int depth = 3;
+                int score = Minimax(boardClone, depth - 1, false);
 
                 boardClone.DeleteBoard();
 
 
-                if (worstResponse > bestScore)
+                if (score > bestScore)
                 {
-                    bestScore = worstResponse;
-                    bestMove = (piece, move);
+                    bestScore = score;
+                    bestMoves.Clear();
+                    bestMoves.Add((piece, move));
+                }
+                else if (score == bestScore)
+                {
+                    bestMoves.Add((piece, move));
                 }
             }
 
-            return bestMove;
+            return bestMoves[rnd.Next(bestMoves.Count)];
+        }
+
+        private int Minimax(Board board, int currentDepth, bool botTurn, int alpha = int.MinValue, int beta = int.MaxValue)
+        {
+            if (currentDepth == 0)
+            {
+                return EvaluateBoard(board);
+            }
+
+            int bestValue;
+
+            if (botTurn)
+            {
+                bestValue = int.MinValue;
+
+                var moves = BoardManipulations.GetAllMoves(board, false);
+
+                foreach ((Piece piece, Cell move) in moves)
+                {
+                    Board clonedBoard = BoardManipulations.CloneBoard(board);
+                    Cell fromCellClone = clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
+                    Cell moveCellClone = clonedBoard.BoardCells[move.Position.X, move.Position.Y];
+
+                    fromCellClone.TryMovePieceTo(moveCellClone);
+
+                    int evaluateBoard = Minimax(clonedBoard, currentDepth - 1, false, alpha, beta);
+
+                    bestValue = Math.Max(bestValue, evaluateBoard);
+                    alpha = Math.Max(alpha, evaluateBoard);
+                    clonedBoard.DeleteBoard();
+
+                    if(beta <= alpha)
+                        break;
+                }
+            }
+            else
+            {
+                bestValue = int.MaxValue;
+
+                var moves = BoardManipulations.GetAllMoves(board, true);
+
+                foreach ((Piece piece, Cell move) in moves)
+                {
+                    Board clonedBoard = BoardManipulations.CloneBoard(board);
+                    Cell fromCellClone = clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
+                    Cell moveCellClone = clonedBoard.BoardCells[move.Position.X, move.Position.Y];
+
+                    fromCellClone.TryMovePieceTo(moveCellClone);
+
+                    int evaluateBoard = Minimax(clonedBoard, currentDepth - 1, true, alpha, beta);
+                    
+                    bestValue = Math.Min(bestValue, evaluateBoard);
+                    beta = Math.Min(beta, evaluateBoard);
+                    clonedBoard.DeleteBoard();
+
+                    if (beta <= alpha)
+                        break;
+                }
+            }
+
+            return bestValue;
         }
     }
 
@@ -868,9 +922,10 @@ namespace GameModel
                     {
                         foreach (Cell move in piece.GetAllMoves())
                         {
-                            if(move.Position.X != piece.CurrentCell.Position.X)
+                            if (move.Position.X != piece.CurrentCell.Position.X)
                                 cells.Add((piece, move));
                         }
+
                         continue;
                     }
 
