@@ -145,5 +145,8 @@
   <ItemGroup>
     <None Include="Resources\Green-Circle-Transparent.png" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="ChessCore\" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

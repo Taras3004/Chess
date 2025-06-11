@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -185,12 +184,12 @@ namespace Chess
                 isBotMove = !isBotMove;
                 OnPieceMoved?.Invoke(this, new PieceMovedEventArgs() {Piece = piece, From = fromCell});
                 board = targetCell.Board;
-                await Task.Delay(1000);
+                //await Task.Delay(1000);
 
                 if (BoardManipulations.GetKing(board, false).IsCheckmated())
                     return;
 
-                var botDecision = bot.FindBestBotMove(board);
+                var botDecision = await Task.Run(() => bot.FindBestBotMove(board));
                 Cell botFromCell = botDecision.piece.CurrentCell;
                 botDecision.piece.CurrentCell.TryMovePieceTo(botDecision.move);
                 isBotMove = !isBotMove;

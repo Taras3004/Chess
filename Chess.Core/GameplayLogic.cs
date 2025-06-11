@@ -1,29 +1,26 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using Chess;
+﻿using System.Drawing;
+using Chess.Core.CustomEventArgs;
 
-namespace GameModel
+
+namespace Chess.Core
 {
     public class Board
     {
-        public Cell[,] BoardCells { get; private set; }
+        public Cell[,] BoardCells { get; private set; } = new Cell[8, 8];
 
         public event EventHandler<PieceEventArgs> OnKingChecked;
         public event EventHandler<PieceEventArgs> OnKingMated;
         public event EventHandler OnStalemateHappened;
         public event EventHandler<PieceEventArgs> OnPawnPromoted;
 
-
         public Pawn LastPawnDoubleMove { get; private set; }
 
         public readonly IGameModeStrategy Strategy;
 
-        public Board(Cell[,] boardCells, IGameModeStrategy strategy)
+        public Board(IGameModeStrategy strategy)
         {
             this.Strategy = strategy;
-            BoardCells = boardCells;
+            //BoardCells = boardCells;
             for (int i = 0; i < 8; i++)
             {
                 for (int j = 0; j < 8; j++)
@@ -125,6 +122,11 @@ namespace GameModel
             BoardCells = null;
             Strategy.OnPieceMoved -= Strategy_OnPieceMoved;
         }
+
+        public void PlacePiece(int x, int y, Piece piece)
+        {
+            BoardCells[x, y].PlacePiece(piece);
+        }
     }
 
     public class Cell(Point position, Board board)
@@ -194,9 +196,7 @@ namespace GameModel
 
         public Piece CurrentSelected { get; private set; }
 
-        private PieceSelection()
-        {
-        }
+        private PieceSelection() { }
 
         private void Select(Piece piece, List<Cell> customObservers = null)
         {
@@ -237,7 +237,6 @@ namespace GameModel
                     return true;
                 }
 
-
                 return false;
             }
 
@@ -271,9 +270,10 @@ namespace GameModel
 
         private List<Cell> CalculatePossibleMoves()
         {
-            return GetAllMoves().Where(cell =>
-                (!cell.IsOccupied() || (cell.IsOccupied() && cell.Piece.IsWhite != IsWhite)) &&
-                !IsKingUnderThreat(cell)).ToList();
+            var moves = GetAllMoves().Where(cell =>
+                !cell.IsOccupied() || (cell.IsOccupied() && cell.Piece.IsWhite != IsWhite)).ToList();
+            return moves;
+            //return FilterLegalMoves(moves, currentCell.Board);
         }
 
         public bool CanMoveTo(Cell cell)
@@ -773,7 +773,7 @@ namespace GameModel
             Random rnd = new Random();
 
             List<(Piece, Cell)> possibleMoves = BoardManipulations.GetAllMoves(originalBoard, false);
-            
+
             List<(Piece piece, Cell move)> bestMoves = new();
 
             King king = BoardManipulations.GetKing(originalBoard, false);
@@ -793,6 +793,7 @@ namespace GameModel
 
                 Cell from = boardClone.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
                 Cell to = boardClone.BoardCells[move.Position.X, move.Position.Y];
+
 
                 from.TryMovePieceTo(to);
 
@@ -817,7 +818,8 @@ namespace GameModel
             return bestMoves[rnd.Next(bestMoves.Count)];
         }
 
-        private int Minimax(Board board, int currentDepth, bool botTurn, int alpha = int.MinValue, int beta = int.MaxValue)
+        private int Minimax(Board board, int currentDepth, bool botTurn, int alpha = int.MinValue,
+            int beta = int.MaxValue)
         {
             if (currentDepth == 0)
             {
@@ -835,7 +837,8 @@ namespace GameModel
                 foreach ((Piece piece, Cell move) in moves)
                 {
                     Board clonedBoard = BoardManipulations.CloneBoard(board);
-                    Cell fromCellClone = clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
+                    Cell fromCellClone =
+                        clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
                     Cell moveCellClone = clonedBoard.BoardCells[move.Position.X, move.Position.Y];
 
                     fromCellClone.TryMovePieceTo(moveCellClone);
@@ -846,7 +849,7 @@ namespace GameModel
                     alpha = Math.Max(alpha, evaluateBoard);
                     clonedBoard.DeleteBoard();
 
-                    if(beta <= alpha)
+                    if (beta <= alpha)
                         break;
                 }
             }
@@ -859,13 +862,14 @@ namespace GameModel
                 foreach ((Piece piece, Cell move) in moves)
                 {
                     Board clonedBoard = BoardManipulations.CloneBoard(board);
-                    Cell fromCellClone = clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
+                    Cell fromCellClone =
+                        clonedBoard.BoardCells[piece.CurrentCell.Position.X, piece.CurrentCell.Position.Y];
                     Cell moveCellClone = clonedBoard.BoardCells[move.Position.X, move.Position.Y];
 
                     fromCellClone.TryMovePieceTo(moveCellClone);
 
                     int evaluateBoard = Minimax(clonedBoard, currentDepth - 1, true, alpha, beta);
-                    
+
                     bestValue = Math.Min(bestValue, evaluateBoard);
                     beta = Math.Min(beta, evaluateBoard);
                     clonedBoard.DeleteBoard();
@@ -941,15 +945,7 @@ namespace GameModel
 
         public static Board CloneBoard(Board board) // DELETE BOARD AFTER USING!!!
         {
-            Cell[,] clonedBoardCells = new Cell[8, 8];
-            Board clonedBoard = new Board(clonedBoardCells, board.Strategy);
-            for (int x = 0; x < 8; x++)
-            {
-                for (int y = 0; y < 8; y++)
-                {
-                    clonedBoardCells[x, y] = new Cell(new Point(x, y), clonedBoard);
-                }
-            }
+            Board clonedBoard = new Board(board.Strategy);
 
             for (int x = 0; x < 8; x++)
             {
@@ -959,7 +955,7 @@ namespace GameModel
                     if (original.IsOccupied())
                     {
                         Piece clonedPiece = original.Piece.Clone();
-                        clonedBoardCells[x, y].PlacePiece(clonedPiece);
+                        clonedBoard.BoardCells[x, y].PlacePiece(clonedPiece);
                     }
                 }
             }

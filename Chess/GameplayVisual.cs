@@ -4,7 +4,6 @@ using GameModel;
 using System.Windows.Forms;
 using Chess;
 using Chess.Properties;
-using System.Runtime.CompilerServices;
 
 namespace GameVisual
 {
