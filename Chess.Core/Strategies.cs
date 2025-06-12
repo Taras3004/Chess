@@ -134,8 +134,8 @@ namespace Chess.Core
 
         public void Init()
         {
-            Board createdBoard = CreateBoard();
-            OnInitialized?.Invoke(this, new GameInitializedEventArgs(createdBoard));
+            board = CreateBoard();
+            OnInitialized?.Invoke(this, new GameInitializedEventArgs(board));
         }
 
         private Board CreateBoard()

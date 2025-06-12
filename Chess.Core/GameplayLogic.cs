@@ -75,9 +75,9 @@ namespace Chess.Core
         private void CheckKingProtection(Piece piece)
         {
             bool isWhitePieceMoved = piece.IsWhite;
-            King king = BoardManipulations.GetKing(piece.CurrentCell.Board, !isWhitePieceMoved);
+            King? king = BoardManipulations.GetKing(piece.CurrentCell.Board, !isWhitePieceMoved);
 
-            if (king.IsCheckmated())
+            if (king != null && king.IsCheckmated())
             {
                 OnKingMated?.Invoke(this, new PieceEventArgs { Piece = king });
             }
@@ -85,7 +85,7 @@ namespace Chess.Core
             {
                 OnStalemateHappened?.Invoke(this, EventArgs.Empty);
             }
-            else if (king.IsChecked())
+            else if (king != null && king.IsChecked())
             {
                 OnKingChecked?.Invoke(this, new PieceEventArgs { Piece = king });
             }
@@ -212,9 +212,9 @@ namespace Chess.Core
 
         public bool TryToSelect(Piece piece)
         {
-            King king = BoardManipulations.GetKing(piece.CurrentCell.Board, piece.IsWhite);
+            King? king = BoardManipulations.GetKing(piece.CurrentCell.Board, piece.IsWhite);
 
-            if (king.IsChecked())
+            if (king != null && king.IsChecked())
             {
                 List<(Piece defender, Cell to)> possibleSelectedPieces = king.KingDefenders();
 
@@ -271,9 +271,8 @@ namespace Chess.Core
         private List<Cell> CalculatePossibleMoves()
         {
             var moves = GetAllMoves().Where(cell =>
-                !cell.IsOccupied() || (cell.IsOccupied() && cell.Piece.IsWhite != IsWhite)).ToList();
+                (!cell.IsOccupied() || (cell.IsOccupied() && cell.Piece.IsWhite != IsWhite)) && IsKingUnderThreat(cell) == false).ToList();
             return moves;
-            //return FilterLegalMoves(moves, currentCell.Board);
         }
 
         public bool CanMoveTo(Cell cell)
@@ -338,7 +337,7 @@ namespace Chess.Core
         {
             var clonedBoard = BoardManipulations.CloneBoard(cell.Board);
 
-            King king = BoardManipulations.GetKing(clonedBoard, IsWhite);
+            King? king = BoardManipulations.GetKing(clonedBoard, IsWhite);
 
             var fromCell = clonedBoard.BoardCells[currentCell.Position.X, currentCell.Position.Y];
             var toCell = clonedBoard.BoardCells[cell.Position.X, cell.Position.Y];
@@ -391,7 +390,7 @@ namespace Chess.Core
 
                 foreach ((Piece attackedBy, Cell attackedCell) in attackedCells)
                 {
-                    if (attackedCell == king.currentCell)
+                    if (attackedCell == king?.currentCell)
                     {
                         clonedBoard.DeleteBoard();
                         return true;
@@ -402,7 +401,7 @@ namespace Chess.Core
             {
                 foreach ((Piece attackedBy, Cell attackedCell) in attackedCells)
                 {
-                    if (attackedCell == king.currentCell)
+                    if (attackedCell == king?.currentCell)
                     {
                         clonedBoard.DeleteBoard();
                         return true;
@@ -776,9 +775,9 @@ namespace Chess.Core
 
             List<(Piece piece, Cell move)> bestMoves = new();
 
-            King king = BoardManipulations.GetKing(originalBoard, false);
+            King? king = BoardManipulations.GetKing(originalBoard, false);
 
-            if (king.IsChecked())
+            if (king != null && king.IsChecked())
             {
                 possibleMoves = king.KingDefenders();
                 foreach (Cell move in king.PossibleMoves)
@@ -963,7 +962,7 @@ namespace Chess.Core
             return clonedBoard;
         }
 
-        public static King GetKing(Board board, bool isWhite)
+        public static King? GetKing(Board board, bool isWhite)
         {
             for (int x = 0; x < 8; x++)
             {
@@ -979,8 +978,9 @@ namespace Chess.Core
                 }
             }
 
-            string col = isWhite ? "White" : "Black";
-            throw new NullReferenceException($"{col} king doesn't exist");
+            //string col = isWhite ? "White" : "Black";
+            //throw new NullReferenceException($"{col} king doesn't exist");
+            return null;
         }
     }
 }
